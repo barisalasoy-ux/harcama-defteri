@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Harcama Defteri</title>
+<meta name="description" content="Offline çalışan gelir-gider defteri">
+<meta name="theme-color" content="#111821">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Defter">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<div id="ev">
+  <div class="ust">
+    <h1 id="selam">Harcama Defteri</h1>
+    <span class="imza">design by alasoy</span>
+  </div>
+
+  <div class="aynav">
+    <button class="nav" id="geri" aria-label="Önceki ay">‹</button>
+    <span class="ad" id="ayad">—</span>
+    <button class="nav" id="ileri" aria-label="Sonraki ay">›</button>
+  </div>
+
+  <div class="kartKalan">
+    <span class="k">Bu ay kalan</span>
+    <span class="v" id="v-kalan">—</span>
+    <span class="alt" id="v-alt">—</span>
+  </div>
+
+  <div class="uclu">
+    <div class="mini"><span class="k">Gelir</span><span class="v pos" id="v-gelir">—</span></div>
+    <div class="mini"><span class="k">Gider</span><span class="v neg" id="v-gider">—</span></div>
+    <div class="mini"><span class="k">Her şey dahil</span><span class="v" id="v-net">—</span></div>
+  </div>
+
+  <div class="kutu">
+    <textarea id="girdi" rows="2" placeholder="markete 420 lira verdim, Ali'den 1500 alacağım var ayın 30'una"></textarea>
+    <div class="girisAlt">
+      <button type="button" class="ana" id="cevir">Kayda çevir</button>
+      <button type="button" class="ikon" id="mikrofon" title="Konuş" aria-label="Konuşarak gir">🎙</button>
+      <button type="button" class="ikon" id="elle" title="Elle gir" aria-label="Elle gir">✎</button>
+    </div>
+    <p class="durum" id="durum" hidden></p>
+  </div>
+
+  <div class="menu">
+    <button type="button" id="m-hareket">Hareketler <span class="ok">›</span></button>
+    <button type="button" id="m-borc">Alacak &amp; Borç <span class="ok" id="borcOk">›</span></button>
+    <button type="button" id="m-aylik">Aylık rapor <span class="ok">›</span></button>
+    <button type="button" id="m-toplam">Toplam rapor <span class="ok">›</span></button>
+  </div>
+
+  <div class="sonlar">
+    <div class="sonBaslik">
+      <span>Son hareketler</span>
+      <button type="button" id="tumu">tümü ›</button>
+    </div>
+    <div class="sonListe" id="sonListe"></div>
+  </div>
+
+  <div class="altCubuk">
+    <button type="button" id="kur" hidden>Telefona kur</button>
+    <button type="button" id="ayarlar">Ayarlar &amp; yedek</button>
+  </div>
+</div>
+
+<div class="kat" id="katman" hidden>
+  <div class="katUst">
+    <button class="nav" id="katGeri" aria-label="Geri">‹</button>
+    <h2 id="katBaslik">—</h2>
+    <button class="nav" id="katKapat" aria-label="Kapat">×</button>
+  </div>
+  <div class="katGovde" id="katGovde"></div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
