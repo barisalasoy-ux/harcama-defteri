@@ -40,7 +40,7 @@ img{max-width:100%}
 .ust{display:flex;align-items:baseline;gap:8px;flex:none}
 .ust h1{margin:0;flex:1;min-width:0;font-size:1.02rem;font-weight:700;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.imza{font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);flex:none}
+.imza{font-size:.62rem;letter-spacing:.1em;color:var(--muted);flex:none}
 
 .aynav{display:flex;align-items:center;gap:8px;flex:none}
 .aynav .ad{flex:1;text-align:center;font-size:.95rem;font-weight:600}
