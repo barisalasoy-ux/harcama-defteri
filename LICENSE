@@ -1,0 +1,47 @@
+KASA — Harcama Defteri
+Telif hakkı (c) 2026 Barış Alasoy. Tüm hakları saklıdır.
+All rights reserved.
+
+TÜRKÇE
+------
+
+Bu depodaki kaynak kodu ve diğer dosyalar herkese açık biçimde yayımlanmıştır;
+ancak bu, kodun kamu malı olduğu ya da serbestçe kullanılabileceği anlamına
+gelmez. Aksi yazılı olarak belirtilmedikçe tüm haklar telif hakkı sahibinde
+saklıdır.
+
+Açıkça serbest olanlar:
+
+  - Kodu okumak, incelemek ve nasıl çalıştığını doğrulamak
+  - Uygulamayı kişisel amaçla kullanmak
+  - Kendi cihazınızda çalıştırmak, öğrenme amacıyla üzerinde denemeler yapmak
+
+Yazılı izin gerektirenler:
+
+  - Kodun tamamını ya da bir bölümünü kendi adınızla yeniden yayımlamak
+  - Ticari bir ürün ya da hizmet içinde kullanmak
+  - Türev bir uygulama çıkarıp dağıtmak (ücretli ya da ücretsiz)
+  - Uygulamayı başka bir isim ya da marka altında sunmak
+
+İzin için: github.com/barisalasoy-ux
+
+Yazılım "olduğu gibi" sunulmaktadır; herhangi bir garanti verilmez. Kullanımdan
+doğabilecek veri kaybı veya zararlardan telif hakkı sahibi sorumlu değildir.
+Kayıtlarınızın yedeğini almak kullanıcının sorumluluğundadır.
+
+ENGLISH
+-------
+
+The source code in this repository is published publicly for inspection and
+transparency. It is not public domain and not open source. All rights are
+reserved by the copyright holder unless stated otherwise in writing.
+
+Permitted: reading and studying the code, verifying its behaviour, and running
+the application for personal use.
+
+Requires written permission: redistributing this code in whole or in part,
+using it in a commercial product or service, publishing derivative
+applications, or offering the application under a different name or brand.
+
+The software is provided "as is", without warranty of any kind. The copyright
+holder is not liable for any data loss or damages arising from its use.

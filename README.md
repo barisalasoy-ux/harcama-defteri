@@ -3,7 +3,15 @@
 Tamamen çevrimdışı çalışan gelir-gider defteri. Veriler **sadece telefonun kendi hafızasında**
 durur, hiçbir sunucuya gönderilmez. Telefona kurulabilir (PWA), uygulamadan farkı yoktur.
 
+**Uygulama:** https://barisalasoy-ux.github.io/harcama-defteri/
+
 design by alasoy
+
+> **Kullanım koşulları.** Bu depo incelenebilir olsun diye açık: uygulamanın hiçbir veriyi
+> dışarı göndermediğini kendiniz doğrulayabilirsiniz. Kod kamuya açık olmakla birlikte kamu
+> malı değildir — tüm hakları saklıdır (bkz. [LICENSE](LICENSE)). Ticari kullanım, yeniden
+> yayınlama ve türev ürün çıkarma izne tabidir. Kişisel kullanım, inceleme ve öğrenme amaçlı
+> çalıştırma serbesttir.
 
 ---
 
