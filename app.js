@@ -16,7 +16,7 @@ var AYLAR=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos"
 var GUNLER=["Pazar","Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi"];
 var TAKSITLER=[1,2,3,4,5,6,8,9,10,12,18,24];
 var ANAHTAR="harcama-defteri-v1";
-var SURUM_ADI="3.3";
+var SURUM_ADI="3.4";
 
 // kategori anahtar kelimeleri (yerel çözümleyici için)
 var IPUCU_GIDER=[
@@ -119,11 +119,32 @@ function parseTutar(s){
   if(s===null||s===undefined) return NaN;
   s=String(s).replace(/\s/g,"").replace(/₺/g,"");
   var n1=s.lastIndexOf("."), v1=s.lastIndexOf(",");
-  if(n1>-1&&v1>-1){ if(v1>n1) s=s.replace(/\./g,"").replace(",","."); else s=s.replace(/,/g,""); }
-  else if(v1>-1){ s=(s.split(",").length>2)?s.replace(/,/g,""):s.replace(",","."); }
-  else if(n1>-1&&s.split(".").length>2){ s=s.replace(/\./g,""); }
+  if(n1>-1&&v1>-1){
+    // ikisi birden: sonda gelen ondalık ayırıcıdır
+    if(v1>n1) s=s.replace(/\./g,"").replace(",",".");
+    else s=s.replace(/,/g,"");
+  } else if(v1>-1){
+    // sadece virgül: Türkçe ondalık (1.250,50 üstte ele alındı)
+    s=(s.split(",").length>2)?s.replace(/,/g,""):s.replace(",",".");
+  } else if(n1>-1){
+    // sadece nokta: son grup 3 haneyse binlik ayırıcıdır (15.000 = 15000)
+    var parcalar=s.split(".");
+    var sonParca=parcalar[parcalar.length-1];
+    if(parcalar.length>2||(sonParca.length===3&&parcalar[0].length>0)) s=parcalar.join("");
+  }
   var n=parseFloat(s);
   return (isFinite(n)&&n>0)?Math.round(n*100)/100:NaN;
+}
+
+// "15 bin", "2 milyon" gibi yazımları sayıya çevir
+function sayiSozcukleri(metin){
+  return String(metin).replace(/(\d[\d.,]*)\s*(bin|milyon|milyar)\b/gi,function(tam,sayi,sozcuk){
+    var t=parseTutar(sayi);
+    if(isNaN(t)) return tam;
+    var k=sozcuk.toLocaleLowerCase("tr");
+    var carpan=k==="bin"?1000:(k==="milyon"?1000000:1000000000);
+    return String(Math.round(t*carpan));
+  });
 }
 function gunBasligi(t){
   var p=String(t).split("-");
@@ -1066,7 +1087,7 @@ function cumleBol(cumle){
 
 function cozumle(metin){
   // rakam arasındaki virgülü (1.250,50) bölme
-  var kaba=String(metin).split(/\n|;|,(?!\s*\d)| ve | ayrıca | bir de /i);
+  var kaba=sayiSozcukleri(metin).split(/\n|;|,(?!\s*\d)| ve | ayrıca | bir de /i);
   var parcalar=[];
   kaba.forEach(function(c){ cumleBol(c).forEach(function(x){ parcalar.push(x); }); });
   var sonuc=[];
