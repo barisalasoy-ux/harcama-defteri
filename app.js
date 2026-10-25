@@ -16,7 +16,7 @@ var AYLAR=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos"
 var GUNLER=["Pazar","Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi"];
 var TAKSITLER=[1,2,3,4,5,6,8,9,10,12,18,24];
 var ANAHTAR="harcama-defteri-v1";
-var SURUM_ADI="3.4";
+var SURUM_ADI="3.5";
 
 // kategori anahtar kelimeleri (yerel çözümleyici için)
 var IPUCU_GIDER=[
@@ -1872,9 +1872,23 @@ $("kur").addEventListener("click",function(){
   kurulumOlayi.prompt();
   kurulumOlayi.userChoice.then(function(){ kurulumOlayi=null; $("kur").hidden=true; });
 });
+// Otomatik güncelleme: yeni sürüm yayınlandığında kullanıcı bir şey yapmasın
 if("serviceWorker" in navigator){
+  var kayitSW=null, yenilendi=false;
   window.addEventListener("load",function(){
-    navigator.serviceWorker.register("sw.js").catch(function(){});
+    navigator.serviceWorker.register("sw.js").then(function(r){ kayitSW=r; }).catch(function(){});
+  });
+  // yeni service worker devralınca sayfayı bir kez tazele
+  navigator.serviceWorker.addEventListener("controllerchange",function(){
+    if(yenilendi) return;
+    yenilendi=true;
+    // form doldururken sayfayı patlatma: katman açıksa bir sonraki açılışa bırak
+    if($("katman")&&!$("katman").hidden) return;
+    location.reload();
+  });
+  // uygulamaya her dönüşte yeni sürüm var mı diye bak
+  document.addEventListener("visibilitychange",function(){
+    if(document.visibilityState==="visible"&&kayitSW&&kayitSW.update) kayitSW.update().catch(function(){});
   });
 }
 
