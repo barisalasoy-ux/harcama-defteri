@@ -83,6 +83,20 @@ Yanlış anlarsa onay ekranından düzeltirsin; hiçbir şey sormadan kaydetmez.
 
 ---
 
+### Aynı şeyi iki kere eklemeye karşı
+
+İki ayrı kontrol var:
+
+1. **Aynı fotoğraf.** Okunan her karenin parmak izi saklanır. Aynı fişi unutup ikinci kez
+   okutursan, Gemini'ye göndermeden önce "bunu daha önce okuttun" diye sorar — hem yanlış
+   kayıttan hem boşa API hakkından korur.
+2. **Aynı kayıt.** Tür + tutar + tarih + açıklama birebir aynıysa o satır "bu kayıt zaten var"
+   diye işaretlenir ve kutucuğu kendiliğinden boş gelir. Gerçekten aynı şeyi tekrar aldıysan
+   işaretleyip eklersin. Dosyadan aktarmada da çalışır: aynı Excel'i ikinci kez verirsen
+   "daha önce eklenenleri atla" seçili gelir.
+
+Bu kontrol yazarak/konuşarak girişte de geçerli.
+
 ### Dosyadan aktarma nasıl çalışır
 
 Banka ekstresi ya da kendi tuttuğun liste binlerce satır olabilir; onu fotoğraflamak anlamsız.
