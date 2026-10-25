@@ -15,7 +15,7 @@ var AYLAR=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos"
 var GUNLER=["Pazar","Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi"];
 var TAKSITLER=[1,2,3,4,5,6,8,9,10,12,18,24];
 var ANAHTAR="harcama-defteri-v1";
-var SURUM_ADI="3.1";
+var SURUM_ADI="3.2";
 
 // kategori anahtar kelimeleri (yerel çözümleyici için)
 var IPUCU_GIDER=[
@@ -1313,73 +1313,234 @@ function fisGoster(v){
   });
 }
 
+// Cihaz türü: kurulum adımları buna göre
+function cihaz(){
+  var u=navigator.userAgent||"";
+  if(/iPad|iPhone|iPod/.test(u)||(/Macintosh/.test(u)&&navigator.maxTouchPoints>1)) return "ios";
+  if(/Android/.test(u)) return "android";
+  return "masaustu";
+}
+
+// Panodan tek dokunuşla anahtar alma — olmazsa elle yapıştırma
+function panodanAl(){
+  try{
+    if(navigator.clipboard&&navigator.clipboard.readText) return navigator.clipboard.readText();
+  }catch(e){}
+  return Promise.reject({hata:"pano"});
+}
+
 function cizGeminiKurulum(govde){
   govde.innerHTML="";
+  var varOlan=anahtarAl();
+
   var c=el("div","card");
   c.appendChild(el("p","bilgi",
-    "Fiş okuma için Google'ın ücretsiz Gemini anahtarı gerekiyor. Anahtar yalnızca bu telefonda "+
-    "saklanır, hiçbir yere gönderilmez. Alması 2 dakika:"));
-  var ol=el("div");
-  ["1. aistudio.google.com/apikey adresine gir",
-   "2. Google hesabınla giriş yap",
-   "3. \"Create API key\" / \"API anahtarı oluştur\"a bas",
-   "4. Çıkan uzun yazıyı kopyala, aşağıya yapıştır"].forEach(function(s){
-    var p=el("p","bilgi",s); p.style.margin="0 0 5px"; ol.appendChild(p);
-  });
-  c.appendChild(ol);
-  var baglanti=el("a",null,"aistudio.google.com/apikey");
-  baglanti.href="https://aistudio.google.com/apikey";
-  baglanti.target="_blank"; baglanti.rel="noopener";
-  baglanti.style.color="var(--accent)"; baglanti.style.fontWeight="600";
-  baglanti.style.display="block"; baglanti.style.margin="4px 0 12px";
-  c.appendChild(baglanti);
+    "Fiş fotoğrafını okutmak için Google'ın ücretsiz Gemini anahtarı gerekiyor. "+
+    "Anahtar yalnızca bu telefonda saklanır; kullanımı kendi Google hesabından düşer, "+
+    "kimseyle paylaşılmaz."));
 
-  var giris=alan(c,"Gemini API anahtarı","text","AIza…");
-  giris.value=anahtarAl();
-  var kaydetBtn=el("button","ana genis","Kaydet ve test et"); kaydetBtn.type="button";
-  c.appendChild(kaydetBtn);
+  // 1. adım
+  var a1=el("div","adim");
+  var b1=el("span","adimNo","1");
+  var m1=el("div","adimIc");
+  m1.appendChild(el("div","adimBas","Google'dan anahtarı al"));
+  m1.appendChild(el("div","adimAlt","Açılan sayfada \"Create API key\"e dokun, çıkan yazıyı kopyala."));
+  var ac=el("a","ana genis","Anahtar sayfasını aç");
+  ac.href="https://aistudio.google.com/apikey";
+  ac.target="_blank"; ac.rel="noopener";
+  ac.style.display="block"; ac.style.textAlign="center";
+  ac.style.textDecoration="none"; ac.style.marginTop="8px";
+  m1.appendChild(ac);
+  a1.appendChild(b1); a1.appendChild(m1);
+  c.appendChild(a1);
+
+  // 2. adım
+  var a2=el("div","adim");
+  var b2=el("span","adimNo","2");
+  var m2=el("div","adimIc");
+  m2.appendChild(el("div","adimBas","Buraya yapıştır"));
+  m2.appendChild(el("div","adimAlt","Kopyaladıktan sonra aşağıdaki düğmeye dokun; telefon \"Yapıştır\" diye soracak."));
+  var yap=el("button","ana genis","Panodakini yapıştır ve bağla"); yap.type="button";
+  yap.style.marginTop="8px";
+  m2.appendChild(yap);
+  var elleAc=el("button","kapatBtn genis","Elle yazmak istiyorum"); elleAc.type="button";
+  elleAc.style.marginTop="7px";
+  m2.appendChild(elleAc);
+  var elleKutu=el("div"); elleKutu.hidden=true;
+  var giris=alan(elleKutu,"Gemini API anahtarı","text","AIza… ya da AQ…");
+  giris.value=varOlan;
+  var elleBtn=el("button","ana genis","Kaydet ve bağlan"); elleBtn.type="button";
+  elleKutu.appendChild(elleBtn);
+  m2.appendChild(elleKutu);
+  elleAc.addEventListener("click",function(){
+    elleKutu.hidden=false; elleAc.hidden=true; giris.focus();
+  });
+  a2.appendChild(b2); a2.appendChild(m2);
+  c.appendChild(a2);
+
   var msg=el("p","durum"); msg.hidden=true; c.appendChild(msg);
   govde.appendChild(c);
 
-  kaydetBtn.addEventListener("click",function(){
-    var v=giris.value.trim();
-    if(!v){ msg.textContent="Anahtarı yapıştır."; msg.className="durum hata"; msg.hidden=false; return; }
-    kaydetBtn.disabled=true; kaydetBtn.textContent="Deneniyor…";
-    msg.hidden=true;
+  function bildir(metin,hataMi){
+    msg.textContent=metin;
+    msg.className="durum"+(hataMi?" hata":"");
+    msg.hidden=false;
+  }
+
+  function bagla(deger,dugme,eskiYazi){
+    var v=String(deger||"").trim().replace(/\s+/g,"");
+    if(!v){ bildir("Panoda anahtar bulamadım. Önce Google sayfasından kopyala.",true); return; }
+    if(v.length<20){ bildir("Bu bir anahtara benzemiyor. Tamamını kopyaladığından emin ol.",true); return; }
+    dugme.disabled=true; dugme.textContent="Bağlanıyor…";
+    bildir("Anahtar deneniyor…",false);
     modelBul(v).then(function(m){
       anahtarYaz(v); modelYaz(m);
-      msg.textContent="Bağlandı. Model: "+m+" — artık 📷 ile fiş çekebilirsin.";
-      msg.className="durum"; msg.hidden=false;
-      kaydetBtn.textContent="Kaydedildi";
+      bildir("Bağlandı. Artık ana ekrandaki 📷 ile fiş çekebilirsin.",false);
+      dugme.textContent="Bağlandı ✓";
+      var bitti=el("button","ana genis","Tamam"); bitti.type="button";
+      bitti.style.marginTop="10px";
+      bitti.addEventListener("click",function(){ katmanKapat(); ciz(); });
+      govde.appendChild(bitti);
     }).catch(function(e){
-      msg.textContent=fisHata(e&&e.error?e.error:e);
-      msg.className="durum hata"; msg.hidden=false;
-      kaydetBtn.disabled=false; kaydetBtn.textContent="Kaydet ve test et";
+      bildir(fisHata(e&&e.error?e.error:e),true);
+      dugme.disabled=false; dugme.textContent=eskiYazi;
     });
-  });
+  }
 
-  if(anahtarAl()){
-    var sil=el("button","kapatBtn genis","Anahtarı sil"); sil.type="button";
-    sil.style.marginTop="8px";
-    sil.addEventListener("click",function(){
-      anahtarYaz(""); modelYaz("");
-      giris.value="";
-      msg.textContent="Anahtar silindi."; msg.className="durum"; msg.hidden=false;
-    });
-    govde.appendChild(sil);
+  yap.addEventListener("click",function(){
+    panodanAl().then(function(v){ bagla(v,yap,"Panodakini yapıştır ve bağla"); })
+      .catch(function(){
+        elleKutu.hidden=false; elleAc.hidden=true; giris.focus();
+        bildir("Telefonun panoya izin vermedi. Anahtarı aşağıdaki kutuya yapıştır.",true);
+      });
+  });
+  elleBtn.addEventListener("click",function(){ bagla(giris.value,elleBtn,"Kaydet ve bağlan"); });
+
+  if(varOlan){
+    var durumK=el("div","card");
+    durumK.style.marginTop="4px";
+    kutuSatiri(durumK,"Durum","Bağlı","pos");
+    if(modelAl()) kutuSatiri(durumK,"Model",modelAl());
+    govde.appendChild(durumK);
+
     var yenile=el("button","kapatBtn genis","Modeli yenile"); yenile.type="button";
-    yenile.style.marginTop="8px";
     yenile.addEventListener("click",function(){
-      yenile.textContent="Aranıyor…";
+      yenile.disabled=true; yenile.textContent="Aranıyor…";
       modelBul(anahtarAl()).then(function(m){
-        modelYaz(m); yenile.textContent="Model: "+m;
+        modelYaz(m); yenile.textContent="Model: "+m; yenile.disabled=false;
       }).catch(function(e){
-        yenile.textContent="Modeli yenile";
-        msg.textContent=fisHata(e); msg.className="durum hata"; msg.hidden=false;
+        yenile.textContent="Modeli yenile"; yenile.disabled=false;
+        bildir(fisHata(e),true);
       });
     });
     govde.appendChild(yenile);
+
+    var sil=el("button","kapatBtn genis","Anahtarı sil"); sil.type="button";
+    var eminMi=false;
+    sil.addEventListener("click",function(){
+      if(!eminMi){ eminMi=true; sil.textContent="Emin misin? Dokun ve silinsin"; return; }
+      anahtarYaz(""); modelYaz("");
+      katmanAc("Fiş okuma kurulumu",cizGeminiKurulum);
+    });
+    govde.appendChild(sil);
   }
+}
+
+// ---- karşılama / kurulum rehberi ----
+function kurulumAdimlari(){
+  var t=cihaz();
+  if(t==="ios") return {
+    baslik:"iPhone'a ekle",
+    adimlar:["Safari'de bu sayfadayken alttaki paylaş simgesine dokun (içinden ok çıkan kutu).",
+             "Listeyi yukarı kaydır, \"Ana Ekrana Ekle\"ye dokun.",
+             "Sağ üstte \"Ekle\"ye dokun. KASA ana ekranında belirecek.",
+             "Bundan sonra hep o ikondan aç; Safari'deki kayıtlar ayrı tutulur."]
+  };
+  if(t==="android") return {
+    baslik:"Android'e ekle",
+    adimlar:["Aşağıdaki \"Telefona kur\" düğmesine dokun.",
+             "Düğme çıkmadıysa Chrome'da sağ üstteki ⋮ menüsünden \"Uygulamayı yükle\"yi seç.",
+             "KASA ana ekranına eklenecek, uygulama gibi açılacak."]
+  };
+  return {
+    baslik:"Bilgisayara ekle",
+    adimlar:["Chrome ya da Edge'de adres çubuğunun sağındaki yükleme simgesine tıkla.",
+             "Ya da menüden \"Uygulamayı yükle\" / \"Install\" seçeneğini kullan."]
+  };
+}
+
+function cizKarsilama(govde){
+  govde.innerHTML="";
+
+  var tanit=el("div","card");
+  tanit.appendChild(el("p","bilgi",
+    "KASA gelir, gider, taksit ve alacak-borç takibi yapar. Bütün kayıtlar yalnızca senin "+
+    "telefonunda durur; internet olmadan da çalışır."));
+  var liste=el("div","ozellikler");
+  [["✍️","Yaz ya da konuş","\"markete 420 lira verdim\" de, kaydı kendi çıkarsın"],
+   ["📷","Fiş çek","Fişteki ürünleri tek tek okuyup kategorilere ayırır"],
+   ["📊","Rapor","Kategori dağılımı, aylık seyir, taksit yükü"],
+   ["🤝","Alacak & borç","Vadesi yaklaşanı ana ekranda hatırlatır"]].forEach(function(o){
+    var s=el("div","ozellik");
+    s.appendChild(el("span","ozIkon",o[0]));
+    var m=el("div");
+    m.appendChild(el("div","ozBas",o[1]));
+    m.appendChild(el("div","ozAlt",o[2]));
+    s.appendChild(m);
+    liste.appendChild(s);
+  });
+  tanit.appendChild(liste);
+  govde.appendChild(tanit);
+
+  if(!arayuzUygulama()){
+    var k=kurulumAdimlari();
+    var b=el("section");
+    b.appendChild(el("h3",null,k.baslik));
+    var c=el("div","card");
+    k.adimlar.forEach(function(metin,i){
+      var a=el("div","adim");
+      a.appendChild(el("span","adimNo",String(i+1)));
+      var ic=el("div","adimIc");
+      ic.appendChild(el("div","adimAlt",metin));
+      a.appendChild(ic);
+      c.appendChild(a);
+    });
+    if(cihaz()==="android"||cihaz()==="masaustu"){
+      var kurB=el("button","ana genis","Telefona kur"); kurB.type="button";
+      kurB.style.marginTop="6px";
+      kurB.addEventListener("click",function(){
+        if(kurulumOlayi){
+          kurulumOlayi.prompt();
+          kurulumOlayi.userChoice.then(function(){ kurulumOlayi=null; });
+        } else {
+          kurB.textContent="Menüden \"Uygulamayı yükle\"yi seç";
+        }
+      });
+      c.appendChild(kurB);
+    }
+    b.appendChild(c); govde.appendChild(b);
+  }
+
+  var b2=el("section");
+  b2.appendChild(el("h3",null,"Fiş okuma (isteğe bağlı)"));
+  var c2=el("div","card");
+  c2.appendChild(el("p","bilgi",
+    anahtarAl()
+      ? "Fiş okuma açık. 📷 ile fiş çekebilirsin."
+      : "Fişten otomatik kalem çıkarmak istersen Google'ın ücretsiz anahtarını bağlaman gerekiyor — "+
+        "iki dokunuş. Bağlamadan da uygulamanın tamamı çalışır."));
+  var git=el("button",anahtarAl()?"kapatBtn genis":"ana genis",
+    anahtarAl()?"Fiş okuma ayarları":"Fiş okumayı aç"); git.type="button";
+  git.addEventListener("click",function(){ katmanAc("Fiş okuma kurulumu",cizGeminiKurulum); });
+  c2.appendChild(git);
+  b2.appendChild(c2); govde.appendChild(b2);
+
+  var bitir=el("button","ana genis","Başla"); bitir.type="button";
+  bitir.addEventListener("click",function(){
+    try{ localStorage.setItem("kasa-karsilama","1"); }catch(e){}
+    katmanKapat();
+  });
+  govde.appendChild(bitir);
 }
 
 $("foto").addEventListener("click",function(){
@@ -1576,6 +1737,10 @@ function cizAyarlar(govde){
   c1.appendChild(say);
   govde.appendChild(c1);
 
+  var rehber=el("button","kapatBtn genis","Kurulum rehberi ve tanıtım"); rehber.type="button";
+  rehber.addEventListener("click",function(){ katmanAc("KASA'ya hoş geldin",cizKarsilama); });
+  govde.appendChild(rehber);
+
   var fisBtn=el("button","ana genis",anahtarAl()?"Fiş okuma ayarları":"Fiş okumayı aç (Gemini)");
   fisBtn.type="button";
   fisBtn.addEventListener("click",function(){ katmanAc("Fiş okuma kurulumu",cizGeminiKurulum); });
@@ -1693,6 +1858,13 @@ try{
 yukle();
 mikrofonKur();
 ciz();
+
+// İlk açılışta tanıtım + kurulum rehberi
+try{
+  if(!localStorage.getItem("kasa-karsilama")&&!veri.kayitlar.length&&!veri.borclar.length){
+    katmanAc("KASA'ya hoş geldin",cizKarsilama);
+  }
+}catch(e){}
 
 })();
 
