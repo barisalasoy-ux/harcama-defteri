@@ -16,7 +16,7 @@ var AYLAR=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos"
 var GUNLER=["Pazar","Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi"];
 var TAKSITLER=[1,2,3,4,5,6,8,9,10,12,18,24];
 var ANAHTAR="harcama-defteri-v1";
-var SURUM_ADI="3.9";
+var SURUM_ADI="4.0";
 
 // kategori anahtar kelimeleri (yerel çözümleyici için)
 var IPUCU_GIDER=[
@@ -173,34 +173,41 @@ function durum(metin,hata){
 
 // ---------------------------------------------------------------- taksit
 function taksitSayisi(r){ return (typeof r.taksit==="number"&&r.taksit>1)?Math.min(60,Math.round(r.taksit)):1; }
+// Bir kaydın aylara dağılımı. Taksitliyse ilk taksit, alışverişten
+// BİR AY SONRAKİ aya düşer (kredi kartı mantığı). Peşinse kendi ayına.
+function taksitYayilimi(r){
+  if(!gecerliTarih(r.tarih)) return [];
+  var n=taksitSayisi(r), p=r.tarih.split("-");
+  var by=Number(p[0]), ba=Number(p[1])-1, gun=Number(p[2])||1;
+  var kaydir=(n>1)?1:0;
+  var pay=Math.round(r.tutar/n*100)/100, out=[];
+  for(var i=0;i<n;i++){
+    var toplamAy=ba+i+kaydir;
+    var yy=by+Math.floor(toplamAy/12), aa=((toplamAy%12)+12)%12;
+    var g=Math.min(gun,new Date(yy,aa+1,0).getDate());
+    out.push({ r:r, pay:pay, sira:i+1, adet:n, y:yy, a:aa,
+      anahtar:ayKey(yy,aa), tarih:ayKey(yy,aa)+"-"+String(g).padStart(2,"0") });
+  }
+  return out;
+}
+
 function aySatirlari(y,a){
   var hedef=ayKey(y,a), out=[];
   veri.kayitlar.forEach(function(r){
-    if(!gecerliTarih(r.tarih)) return;
-    var n=taksitSayisi(r), p=r.tarih.split("-");
-    var by=Number(p[0]), ba=Number(p[1])-1, gun=Number(p[2])||1;
-    for(var i=0;i<n;i++){
-      var yy=by+Math.floor((ba+i)/12), aa=(ba+i)%12;
-      if(ayKey(yy,aa)===hedef){
-        var g=Math.min(gun,new Date(yy,aa+1,0).getDate());
-        out.push({ r:r, pay:Math.round(r.tutar/n*100)/100, sira:i+1, adet:n,
-          tarih: i===0?r.tarih:(ayKey(yy,aa)+"-"+String(g).padStart(2,"0")) });
-        break;
-      }
+    var yayilim=taksitYayilimi(r);
+    for(var i=0;i<yayilim.length;i++){
+      if(yayilim[i].anahtar===hedef){ out.push(yayilim[i]); break; }
     }
   });
   return out;
 }
+
 function gelecekTaksitYuku(){
   var simdi=ayKey(yil,ay), toplam=0;
   veri.kayitlar.forEach(function(r){
-    if(r.tur==="gelir"||!gecerliTarih(r.tarih)) return;
-    var n=taksitSayisi(r); if(n<2) return;
-    var p=r.tarih.split("-"), by=Number(p[0]), ba=Number(p[1])-1;
-    for(var i=0;i<n;i++){
-      var yy=by+Math.floor((ba+i)/12), aa=(ba+i)%12;
-      if(ayKey(yy,aa)>simdi) toplam+=r.tutar/n;
-    }
+    if(r.tur==="gelir") return;
+    if(taksitSayisi(r)<2) return;
+    taksitYayilimi(r).forEach(function(x){ if(x.anahtar>simdi) toplam+=x.pay; });
   });
   return Math.round(toplam*100)/100;
 }
@@ -781,15 +788,12 @@ function cizTaksitler(govde){
   govde.innerHTML="";
   var simdi=ayKey(yil,ay), liste=[];
   veri.kayitlar.forEach(function(r){
-    if(r.tur==="gelir"||!gecerliTarih(r.tarih)) return;
+    if(r.tur==="gelir") return;
     var n=taksitSayisi(r); if(n<2) return;
-    var p=r.tarih.split("-"), by=Number(p[0]), ba=Number(p[1])-1;
-    var kalanAdet=0, oduk=0;
-    for(var i=0;i<n;i++){
-      var yy=by+Math.floor((ba+i)/12), aa=(ba+i)%12;
-      if(ayKey(yy,aa)>simdi) kalanAdet++; else oduk++;
-    }
-    if(kalanAdet) liste.push({r:r,pay:r.tutar/n,kalanAdet:kalanAdet,oduk:oduk,adet:n});
+    var yayilim=taksitYayilimi(r), kalanAdet=0, oduk=0;
+    yayilim.forEach(function(x){ if(x.anahtar>simdi) kalanAdet++; else oduk++; });
+    if(kalanAdet) liste.push({r:r,pay:yayilim[0].pay,kalanAdet:kalanAdet,oduk:oduk,adet:n,
+      ilk:yayilim[0].tarih,son:yayilim[n-1].tarih});
   });
   if(!liste.length){ govde.appendChild(el("p","durum","Gelecek aylara kalan taksit yok.")); return; }
   liste.sort(function(a,b){ return (b.kalanAdet*b.pay)-(a.kalanAdet*a.pay); });
@@ -798,8 +802,8 @@ function cizTaksitler(govde){
   var c=el("div","card");
   c.appendChild(tablo(["Harcama","Durum","Aylık","Kalan"],
     liste.map(function(x){
-      return [(x.r.aciklama||x.r.kategori), x.oduk+"/"+x.adet+" ödendi",
-        paraK(x.pay), paraK(x.kalanAdet*x.pay)];
+      return [(x.r.aciklama||x.r.kategori)+" · son "+kisaTarih(x.son),
+        x.oduk+"/"+x.adet+" ödendi", paraK(x.pay), paraK(x.kalanAdet*x.pay)];
     }),
     ["TOPLAM","","",paraK(toplam)]));
   govde.appendChild(c);
@@ -945,16 +949,12 @@ function cizToplamRapor(govde){
 
   var aylar={}, yillar={};
   veri.kayitlar.forEach(function(r){
-    if(!gecerliTarih(r.tarih)) return;
-    var n=taksitSayisi(r), p=r.tarih.split("-"), by=Number(p[0]), ba=Number(p[1])-1;
-    for(var i=0;i<n;i++){
-      var yy=by+Math.floor((ba+i)/12), aa=(ba+i)%12, k=ayKey(yy,aa);
-      if(!aylar[k]) aylar[k]={gelir:0,gider:0,y:yy,a:aa};
-      if(!yillar[yy]) yillar[yy]={gelir:0,gider:0};
-      var pay=r.tutar/n;
-      if(r.tur==="gelir"){ aylar[k].gelir+=pay; yillar[yy].gelir+=pay; }
-      else { aylar[k].gider+=pay; yillar[yy].gider+=pay; }
-    }
+    taksitYayilimi(r).forEach(function(x){
+      if(!aylar[x.anahtar]) aylar[x.anahtar]={gelir:0,gider:0,y:x.y,a:x.a};
+      if(!yillar[x.y]) yillar[x.y]={gelir:0,gider:0};
+      if(r.tur==="gelir"){ aylar[x.anahtar].gelir+=x.pay; yillar[x.y].gelir+=x.pay; }
+      else { aylar[x.anahtar].gider+=x.pay; yillar[x.y].gider+=x.pay; }
+    });
   });
   var anahtar=Object.keys(aylar).sort(), tg=0, td=0;
   anahtar.forEach(function(k){ tg+=aylar[k].gelir; td+=aylar[k].gider; });

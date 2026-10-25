@@ -1,7 +1,7 @@
 /* KASA — service worker.
    Uygulama dosyaları: önce ağ, olmazsa önbellek (güncellemeler anında gelsin).
    İnternet yoksa her şey önbellekten çalışır. */
-var SURUM = "kasa-v20";
+var SURUM = "kasa-v21";
 var DOSYALAR = [
   "./",
   "./index.html",
