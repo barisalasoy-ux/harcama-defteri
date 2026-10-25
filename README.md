@@ -1,4 +1,4 @@
-# Harcama Defteri — offline telefon uygulaması
+# KASA — offline harcama takip uygulaması
 
 Tamamen çevrimdışı çalışan gelir-gider defteri. Veriler **sadece telefonun kendi hafızasında**
 durur, hiçbir sunucuya gönderilmez. Telefona kurulabilir (PWA), uygulamadan farkı yoktur.

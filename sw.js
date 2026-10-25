@@ -1,7 +1,7 @@
-/* Harcama Defteri — service worker.
+/* KASA — service worker.
    Uygulama dosyaları: önce ağ, olmazsa önbellek (güncellemeler anında gelsin).
    İnternet yoksa her şey önbellekten çalışır. */
-var SURUM = "defter-v5";
+var SURUM = "kasa-v6";
 var DOSYALAR = [
   "./",
   "./index.html",

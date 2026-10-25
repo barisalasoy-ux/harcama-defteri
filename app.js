@@ -1,4 +1,4 @@
-/* Harcama Defteri — offline gelir/gider defteri. design by alasoy
+/* KASA — offline gelir/gider defteri. design by alasoy
    Veriler telefonun kendi hafızasında (localStorage) tutulur, hiçbir yere gönderilmez. */
 (function(){
 "use strict";
@@ -15,7 +15,7 @@ var AYLAR=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos"
 var GUNLER=["Pazar","Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi"];
 var TAKSITLER=[1,2,3,4,5,6,8,9,10,12,18,24];
 var ANAHTAR="harcama-defteri-v1";
-var SURUM_ADI="1.3";
+var SURUM_ADI="1.4";
 
 // kategori anahtar kelimeleri (yerel çözümleyici için)
 var IPUCU_GIDER=[
@@ -980,7 +980,7 @@ function csvIndir(){
       (s.r.isyeri||"").replace(/;/g,","),
       s.adet>1?(s.sira+"/"+s.adet):"peşin",nf.format(s.pay),nf.format(s.r.tutar)].join(";"));
   });
-  dosyaIndir("harcama-"+ayKey(yil,ay)+".csv","text/csv;charset=utf-8","﻿"+out.join("\r\n"));
+  dosyaIndir("kasa-"+ayKey(yil,ay)+".csv","text/csv;charset=utf-8","﻿"+out.join("\r\n"));
 }
 function dosyaIndir(adi,tip,icerik){
   try{
@@ -1006,7 +1006,7 @@ function cizAyarlar(govde){
 
   var b1=el("button","ana genis","Yedek al (JSON)"); b1.type="button";
   b1.addEventListener("click",function(){
-    dosyaIndir("harcama-defteri-yedek-"+iso(new Date())+".json","application/json",
+    dosyaIndir("kasa-yedek-"+iso(new Date())+".json","application/json",
       JSON.stringify({surum:1,tarih:new Date().toISOString(),veri:veri},null,1));
   });
   govde.appendChild(b1);
@@ -1070,7 +1070,7 @@ function cizAyarlar(govde){
   });
   govde.appendChild(yenile);
 
-  govde.appendChild(el("p","bilgi","Harcama Defteri · sürüm "+SURUM_ADI+" · offline · design by alasoy"));
+  govde.appendChild(el("p","bilgi","KASA · sürüm "+SURUM_ADI+" · tamamen cihazda · design by alasoy"));
 }
 
 // ---------------------------------------------------------------- menü

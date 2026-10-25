@@ -1,7 +1,7 @@
 {
-  "name": "Harcama Defteri",
-  "short_name": "Defter",
-  "description": "Offline çalışan gelir-gider defteri",
+  "name": "KASA — Alasoy",
+  "short_name": "KASA",
+  "description": "Gelir, gider, taksit ve alacak-borç takibi. Tamamen cihazda çalışır.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
