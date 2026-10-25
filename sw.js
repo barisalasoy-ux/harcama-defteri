@@ -1,7 +1,7 @@
 /* KASA — service worker.
    Uygulama dosyaları: önce ağ, olmazsa önbellek (güncellemeler anında gelsin).
    İnternet yoksa her şey önbellekten çalışır. */
-var SURUM = "kasa-v18";
+var SURUM = "kasa-v19";
 var DOSYALAR = [
   "./",
   "./index.html",
@@ -40,8 +40,11 @@ self.addEventListener("fetch", function(e){
   if(url.origin !== self.location.origin) return;
 
   // Uygulamanın kendi dosyaları: önce ağdan dene, başarısız olursa önbellekten ver.
+  // cache:"reload" tarayıcının kendi HTTP önbelleğini atlar; eski dosya takılı kalmasın.
+  var agIstegi;
+  try{ agIstegi=new Request(istek,{cache:"reload"}); }catch(hata){ agIstegi=istek; }
   e.respondWith(
-    fetch(istek).then(function(yanit){
+    fetch(agIstegi).then(function(yanit){
       if(yanit && yanit.status === 200){
         var kopya = yanit.clone();
         caches.open(SURUM).then(function(c){ c.put(istek, kopya); });

@@ -16,7 +16,7 @@ var AYLAR=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos"
 var GUNLER=["Pazar","Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi"];
 var TAKSITLER=[1,2,3,4,5,6,8,9,10,12,18,24];
 var ANAHTAR="harcama-defteri-v1";
-var SURUM_ADI="3.7";
+var SURUM_ADI="3.8";
 
 // kategori anahtar kelimeleri (yerel çözümleyici için)
 var IPUCU_GIDER=[
@@ -214,10 +214,15 @@ function acikBorclar(){ return veri.borclar.filter(function(r){ return r.durum!=
 // ---------------------------------------------------------------- ana ekran
 function cizEv(){
   var b=new Date();
-  var adEl=$("ayad").querySelector(".ayAdi"), altYazi=$("ayad").querySelector(".ayAlt");
-  if(!adEl||!altYazi){ $("ayad").textContent=AYLAR[ay]+" "+yil; adEl=null; }
-  if(adEl) adEl.textContent=AYLAR[ay]+" "+yil;
-  if(!altYazi){ altYazi={}; }
+  var kutu=$("ayad");
+  var adEl=kutu.querySelector(".ayAdi"), altYazi=kutu.querySelector(".ayAlt");
+  if(!adEl||!altYazi){            // eski HTML: parçaları burada kur
+    kutu.textContent="";
+    kutu.classList.add("ad");
+    adEl=el("span","ayAdi"); altYazi=el("span","ayAlt");
+    kutu.appendChild(adEl); kutu.appendChild(altYazi);
+  }
+  adEl.textContent=AYLAR[ay]+" "+yil;
   if(yil===b.getFullYear()&&ay===b.getMonth()){
     altYazi.className="ayAlt";
     altYazi.textContent="bugün "+b.getDate()+" "+AYLAR[b.getMonth()]+" "+GUNLER[b.getDay()];
@@ -1947,7 +1952,18 @@ function cizAyarlar(govde){
 // ---------------------------------------------------------------- menü
 $("geri").addEventListener("click",function(){ ay--; if(ay<0){ ay=11; yil--; } ciz(); });
 $("ileri").addEventListener("click",function(){ ay++; if(ay>11){ ay=0; yil++; } ciz(); });
-$("netKutu").addEventListener("click",function(){ katmanAc("Her şey dahil",cizNetDetay); });
+(function(){
+  var hedef=$("netKutu");
+  if(!hedef&&$("v-net")) hedef=$("v-net").parentNode;   // eski HTML
+  if(!hedef) return;
+  hedef.classList.add("vurgu");
+  hedef.style.cursor="pointer";
+  if(!hedef.querySelector(".okMini")){
+    var k=hedef.querySelector(".k");
+    if(k) k.appendChild(el("span","okMini"," ›"));
+  }
+  hedef.addEventListener("click",function(){ katmanAc("Her şey dahil",cizNetDetay); });
+})();
 $("ayad").addEventListener("click",function(){
   var b=new Date();
   yil=b.getFullYear(); ay=b.getMonth();
