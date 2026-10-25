@@ -16,7 +16,7 @@ var AYLAR=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos"
 var GUNLER=["Pazar","Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi"];
 var TAKSITLER=[1,2,3,4,5,6,8,9,10,12,18,24];
 var ANAHTAR="harcama-defteri-v1";
-var SURUM_ADI="3.5";
+var SURUM_ADI="3.6";
 
 // kategori anahtar kelimeleri (yerel çözümleyici için)
 var IPUCU_GIDER=[
@@ -213,7 +213,16 @@ function acikBorclar(){ return veri.borclar.filter(function(r){ return r.durum!=
 
 // ---------------------------------------------------------------- ana ekran
 function cizEv(){
-  $("ayad").textContent=AYLAR[ay]+" "+yil;
+  var b=new Date();
+  $("ayad").querySelector(".ayAdi").textContent=AYLAR[ay]+" "+yil;
+  var altYazi=$("ayad").querySelector(".ayAlt");
+  if(yil===b.getFullYear()&&ay===b.getMonth()){
+    altYazi.className="ayAlt";
+    altYazi.textContent="bugün "+b.getDate()+" "+AYLAR[b.getMonth()]+" "+GUNLER[b.getDay()];
+  } else {
+    altYazi.className="ayAlt donus";
+    altYazi.textContent="↩ bugüne dön";
+  }
   var satirlar=aySatirlari(yil,ay), gelir=0, gider=0;
   satirlar.forEach(function(s){ if(s.r.tur==="gelir") gelir+=s.pay; else gider+=s.pay; });
   var kalan=gelir-gider, k=$("v-kalan");
@@ -1851,6 +1860,11 @@ function cizAyarlar(govde){
 // ---------------------------------------------------------------- menü
 $("geri").addEventListener("click",function(){ ay--; if(ay<0){ ay=11; yil--; } ciz(); });
 $("ileri").addEventListener("click",function(){ ay++; if(ay>11){ ay=0; yil++; } ciz(); });
+$("ayad").addEventListener("click",function(){
+  var b=new Date();
+  yil=b.getFullYear(); ay=b.getMonth();
+  silAdayi=null; ciz();
+});
 $("m-hareket").addEventListener("click",function(){ katmanAc("Hareketler",cizHareketler); });
 $("m-borc").addEventListener("click",function(){ katmanAc("Alacak & Borç",cizBorc); });
 $("m-aylik").addEventListener("click",function(){ katmanAc("Aylık rapor",cizAylikRapor); });

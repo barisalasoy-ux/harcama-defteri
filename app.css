@@ -43,7 +43,14 @@ img{max-width:100%}
 .imza{font-size:.62rem;letter-spacing:.1em;color:var(--muted);flex:none}
 
 .aynav{display:flex;align-items:center;gap:8px;flex:none}
-.aynav .ad{flex:1;text-align:center;font-size:.95rem;font-weight:600}
+.aynav .ad{flex:1;min-width:0;text-align:center;border:0;background:none;color:var(--fg);
+  font-family:var(--font-ui);cursor:pointer;padding:2px 4px;
+  display:flex;flex-direction:column;align-items:center;gap:1px}
+.aynav .ad:active{opacity:.6}
+.ayAdi{font-size:.95rem;font-weight:600}
+.ayAlt{font-size:.68rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  max-width:100%}
+.ayAlt.donus{color:var(--accent);font-weight:600}
 .nav{width:34px;height:34px;flex:none;border:1px solid var(--line);background:var(--surface);
   color:var(--fg);border-radius:10px;font-size:1.05rem;line-height:1;cursor:pointer}
 
