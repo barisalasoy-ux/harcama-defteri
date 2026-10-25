@@ -40,7 +40,8 @@ var IPUCU_GIDER=[
   ["Tatil",["tatil","otel","uçak","tur","konaklama"]],
   ["Abonelik",["abonelik","netflix","spotify","youtube premium","üyelik","exxen","bein"]],
   ["Sigorta",["sigorta","kasko","dask","bes","poliçe"]],
-  ["Kredi & Taksit",["kredi","taksit ödeme","kredi kartı borcu","banka borcu"]],
+  ["Kredi & Taksit",["kredi","taksit ödeme","kredi kartı borcu","banka borcu","bankaya","banka",
+                     "kart borcu","kredi kartı","ekstre","konut kredisi","taşıt kredisi"]],
   ["Vergi & Harç",["vergi","harç","ceza","mtv","trafik cezası","noter"]],
   ["Hediye",["hediye","çiçek","doğum günü","düğün takı","nişan"]],
   ["Evcil hayvan",["kedi","köpek","veteriner","kedi maması","köpek maması","kuş"]],
@@ -719,8 +720,21 @@ function kategoriBul(d,tur){
   return "Diğer";
 }
 function kisiBul(cumle){
-  var m=cumle.match(/([A-ZÇĞİÖŞÜ][a-zçğıöşü]{1,15})['’]?(?:d[ae]n|t[ae]n|y[ae]|a|e)\b/);
-  return m?m[1]:"";
+  // Büyük harfle başlayan kelimeyi bul, Türkçe çekim ekini kırp (uzun ekten kısaya)
+  var EKLER=["nden","ndan","nin","nın","nun","nün","den","dan","ten","tan",
+             "ler","lar","ye","ya","in","ın","un","ün","e","a","i","ı"];
+  var kelimeler=String(cumle).match(/[A-ZÇĞİÖŞÜ][a-zçğıöşüA-ZÇĞİÖŞÜ'’]{1,18}/g);
+  if(!kelimeler) return "";
+  for(var i=0;i<kelimeler.length;i++){
+    var k=kelimeler[i].replace(/['’]/g," ").split(" ")[0]; // Ahmet'in -> Ahmet
+    if(kelimeler[i].indexOf("'")>-1||kelimeler[i].indexOf("’")>-1) return k;
+    for(var j=0;j<EKLER.length;j++){
+      var e=EKLER[j];
+      if(k.length>e.length+2&&k.slice(-e.length).toLocaleLowerCase("tr")===e) return k.slice(0,-e.length);
+    }
+    if(k.length>2) return k;
+  }
+  return "";
 }
 function cozumle(metin){
   // rakam arasındaki virgülü (1.250,50) bölme
@@ -744,9 +758,18 @@ function cozumle(metin){
     }
     if(isNaN(tutar)) return;
     var tip="gider";
-    if(/alacag|alacak|borc verdim|bana borclu|verecek/.test(d)) tip="alacak";
-    else if(/borcum|borcluyum|borc aldim|odeyecegim/.test(d)) tip="borc";
-    else if(/maas|geldi|yatti|kazandim|aldim maas|gelir|sattim|iade/.test(d)) tip="gelir";
+    var odendi=/odedim|odedik|odendi|kapattim|yatirdim/.test(d);
+    if(odendi&&!/borc verdim/.test(d)){
+      tip="gider";                       // "kredi kartı borcunu ödedim" -> gider
+    }
+    // bana borcu var / borç verdim / alacağım -> ALACAK
+    else if(/alacag|borc verdim|borc verecek|bana borclu|bana borcu|bana verecek|borcu var|borclu bana/.test(d))
+      tip="alacak";
+    // borcum var / borçluyum / ödeyeceğim -> BORC
+    else if(/borcum|borcluyum|borc aldim|borc cektim|odeyecegim|odemem gerek|vermem gerek/.test(d))
+      tip="borc";
+    else if(/maas|yatti|kazandim|sattim|iade|prim aldim|ikramiye|kira geldi|para geldi|gelir/.test(d))
+      tip="gelir";
     var kat=tip==="gelir"||tip==="gider"?kategoriBul(d,tip==="gelir"?"gelir":"gider"):"";
     var temiz=cumle
       .replace(/ay[ıi]n\s+\d{1,2}\s*['’]?\s*[a-zçğıöşü]*/gi,"")

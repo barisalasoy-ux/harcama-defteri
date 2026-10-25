@@ -1,5 +1,5 @@
 /* Harcama Defteri — service worker: uygulamayı tamamen offline çalıştırır. */
-var SURUM = "defter-v1";
+var SURUM = "defter-v2";
 var DOSYALAR = [
   "./",
   "./index.html",
