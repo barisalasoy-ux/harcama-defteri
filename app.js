@@ -16,7 +16,7 @@ var AYLAR=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos"
 var GUNLER=["Pazar","Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi"];
 var TAKSITLER=[1,2,3,4,5,6,8,9,10,12,18,24];
 var ANAHTAR="harcama-defteri-v1";
-var SURUM_ADI="4.0";
+var SURUM_ADI="4.1";
 
 // kategori anahtar kelimeleri (yerel çözümleyici için)
 var IPUCU_GIDER=[
@@ -1851,6 +1851,303 @@ function incelemeCiz(card,girdiler,bitti,tekSecenek){
   });
 }
 
+// ---------------------------------------------------------------- Excel aktarımı
+function tumYayilim(){
+  var out=[];
+  veri.kayitlar.forEach(function(r){ taksitYayilimi(r).forEach(function(x){ out.push(x); }); });
+  out.sort(function(a,b){ return a.tarih<b.tarih?-1:(a.tarih>b.tarih?1:0); });
+  return out;
+}
+function exTarih(t){ return {d:t,t:"d",s:KasaExcel.S.tarih}; }
+function exPara(n){ return {d:Math.round(n*100)/100,t:"n",s:KasaExcel.S.para}; }
+function exParaK(n){ return {d:Math.round(n*100)/100,t:"n",s:KasaExcel.S.paraKalin}; }
+function exKalin(m){ return {d:m,s:KasaExcel.S.kalin}; }
+function exBaslik(m){ return {d:m,s:KasaExcel.S.baslik}; }
+function exYuzde(n){ return {d:n,t:"n",s:KasaExcel.S.yuzde}; }
+function exUstBaslik(m){ return {d:m,s:KasaExcel.S.buyukBaslik}; }
+function exNot(m){ return {d:m,s:KasaExcel.S.altBilgi}; }
+
+function hareketSayfasi(satirlar,ad){
+  var s=[[exBaslik("Tarih"),exBaslik("Tür"),exBaslik("Kategori"),exBaslik("Açıklama"),
+          exBaslik("Nereden"),exBaslik("Taksit"),exBaslik("O ayki tutar"),exBaslik("Toplam tutar")]];
+  satirlar.forEach(function(x){
+    s.push([exTarih(x.tarih), x.r.tur==="gelir"?"Gelir":"Gider", x.r.kategori||"Diğer",
+      x.r.aciklama||"", x.r.isyeri||"",
+      x.adet>1?(x.sira+"/"+x.adet):"peşin",
+      exPara(x.pay), exPara(x.r.tutar)]);
+  });
+  var gelir=0, gider=0;
+  satirlar.forEach(function(x){ if(x.r.tur==="gelir") gelir+=x.pay; else gider+=x.pay; });
+  s.push([]);
+  s.push([exKalin("TOPLAM"),"","","","","",exParaK(gelir-gider),""]);
+  s.push([exNot("Gelir "+nf.format(gelir)+" ₺ · Gider "+nf.format(gider)+" ₺")]);
+  return { ad:ad, satirlar:s, genislikler:[12,9,20,42,16,9,15,15], dondur:1,
+    filtre:"A1:H"+(satirlar.length+1) };
+}
+
+function kategoriSayfasi(satirlar,ad){
+  var s=[];
+  ["gider","gelir"].forEach(function(tur){
+    var m={}, genel=0;
+    satirlar.forEach(function(x){
+      if(x.r.tur!==tur) return;
+      var k=x.r.kategori||"Diğer";
+      if(!m[k]) m[k]={tutar:0,adet:0};
+      m[k].tutar+=x.pay; m[k].adet++; genel+=x.pay;
+    });
+    var liste=Object.keys(m).sort(function(a,b){ return m[b].tutar-m[a].tutar; });
+    if(!liste.length) return;
+    if(s.length) s.push([]);
+    s.push([exUstBaslik(tur==="gider"?"Gider kategorileri":"Gelir kategorileri")]);
+    s.push([exBaslik("Kategori"),exBaslik("Kayıt"),exBaslik("Tutar"),exBaslik("Pay")]);
+    liste.forEach(function(k){
+      s.push([k,{d:m[k].adet,t:"n"},exPara(m[k].tutar),exYuzde(genel?m[k].tutar/genel:0)]);
+    });
+    s.push([exKalin("TOPLAM"),{d:satirlar.filter(function(x){return x.r.tur===tur;}).length,t:"n",s:KasaExcel.S.kalin},
+      exParaK(genel),{d:1,t:"n",s:KasaExcel.S.kalin}]);
+  });
+  if(!s.length) s=[["Kayıt yok"]];
+  return { ad:ad, satirlar:s, genislikler:[26,10,16,10] };
+}
+
+// kategori x ay matrisi
+function pivotSayfasi(satirlar,ad){
+  var aylar=[], gorulen={};
+  satirlar.forEach(function(x){
+    if(!gorulen[x.anahtar]){ gorulen[x.anahtar]=1; aylar.push(x.anahtar); }
+  });
+  aylar.sort();
+  if(aylar.length<2) return null;
+  var m={};
+  satirlar.forEach(function(x){
+    if(x.r.tur==="gelir") return;
+    var k=x.r.kategori||"Diğer";
+    if(!m[k]) m[k]={};
+    m[k][x.anahtar]=(m[k][x.anahtar]||0)+x.pay;
+  });
+  var kategoriler=Object.keys(m).sort(function(a,b){
+    var ta=0, tb=0;
+    aylar.forEach(function(ay){ ta+=m[a][ay]||0; tb+=m[b][ay]||0; });
+    return tb-ta;
+  });
+  if(!kategoriler.length) return null;
+  var bas=[exBaslik("Kategori")];
+  aylar.forEach(function(ay){
+    var p=ay.split("-");
+    bas.push(exBaslik(AYLAR[Number(p[1])-1].slice(0,3)+" "+p[0].slice(2)));
+  });
+  bas.push(exBaslik("Toplam"));
+  var s=[[exUstBaslik("Gider · kategori x ay")],[],bas];
+  kategoriler.forEach(function(k){
+    var satir=[k], t=0;
+    aylar.forEach(function(ay){
+      var v=m[k][ay]||0; t+=v;
+      satir.push(v?exPara(v):"");
+    });
+    satir.push(exParaK(t));
+    s.push(satir);
+  });
+  var sonSatir=[exKalin("TOPLAM")], genel=0;
+  aylar.forEach(function(ay){
+    var t=0;
+    kategoriler.forEach(function(k){ t+=m[k][ay]||0; });
+    genel+=t;
+    sonSatir.push(exParaK(t));
+  });
+  sonSatir.push(exParaK(genel));
+  s.push(sonSatir);
+  var gen=[24]; aylar.forEach(function(){ gen.push(14); }); gen.push(16);
+  return { ad:ad, satirlar:s, genislikler:gen, dondur:3 };
+}
+
+function taksitSayfasi(){
+  var liste=[];
+  veri.kayitlar.forEach(function(r){
+    if(r.tur==="gelir"||taksitSayisi(r)<2) return;
+    var y=taksitYayilimi(r), simdi=ayKey(yil,ay), oduk=0, kalan=0;
+    y.forEach(function(x){ if(x.anahtar>simdi) kalan++; else oduk++; });
+    liste.push({r:r,y:y,oduk:oduk,kalan:kalan});
+  });
+  if(!liste.length) return null;
+  liste.sort(function(a,b){ return (b.kalan*b.y[0].pay)-(a.kalan*a.y[0].pay); });
+  var s=[[exBaslik("Harcama"),exBaslik("Kategori"),exBaslik("Toplam"),exBaslik("Taksit"),
+          exBaslik("Aylık"),exBaslik("Ödenen"),exBaslik("Kalan"),exBaslik("İlk"),exBaslik("Son")]];
+  var kalanToplam=0;
+  liste.forEach(function(x){
+    kalanToplam+=x.kalan*x.y[0].pay;
+    s.push([x.r.aciklama||x.r.kategori, x.r.kategori||"Diğer", exPara(x.r.tutar),
+      {d:x.y.length,t:"n"}, exPara(x.y[0].pay), {d:x.oduk,t:"n"}, exPara(x.kalan*x.y[0].pay),
+      exTarih(x.y[0].tarih), exTarih(x.y[x.y.length-1].tarih)]);
+  });
+  s.push([]);
+  s.push([exKalin("KALAN TOPLAM"),"","","","","",exParaK(kalanToplam),"",""]);
+  return { ad:"Taksitler", satirlar:s, genislikler:[34,20,15,8,14,9,15,12,12], dondur:1 };
+}
+
+function borcSayfasi(){
+  if(!veri.borclar.length) return null;
+  var s=[[exBaslik("Yön"),exBaslik("Kişi / kurum"),exBaslik("Tutar"),exBaslik("Vade"),
+          exBaslik("Durum"),exBaslik("Kapanış"),exBaslik("Not")]];
+  var ta=0, tb=0;
+  veri.borclar.slice().sort(function(a,b){
+    return (a.durum===b.durum)?((a.vade||"")<(b.vade||"")?-1:1):(a.durum==="kapandi"?1:-1);
+  }).forEach(function(r){
+    if(r.durum!=="kapandi"){ if(r.yon==="alacak") ta+=r.tutar; else tb+=r.tutar; }
+    s.push([r.yon==="alacak"?"Alacak":"Borç", r.kisi||"", exPara(r.tutar),
+      gecerliTarih(r.vade)?exTarih(r.vade):"", r.durum==="kapandi"?"Kapandı":"Açık",
+      gecerliTarih(r.kapanis)?exTarih(r.kapanis):"", r.aciklama||""]);
+  });
+  s.push([]);
+  s.push([exKalin("Açık alacak"),"",exParaK(ta),"","","",""]);
+  s.push([exKalin("Açık borç"),"",exParaK(tb),"","","",""]);
+  s.push([exKalin("Fark"),"",exParaK(ta-tb),"","","",""]);
+  return { ad:"Alacak & Borç", satirlar:s, genislikler:[10,22,15,12,10,12,30], dondur:1 };
+}
+
+function ozetSayfasi(baslik,satirlar,aylikTablo){
+  var gelir=0, gider=0;
+  satirlar.forEach(function(x){ if(x.r.tur==="gelir") gelir+=x.pay; else gider+=x.pay; });
+  var acik=acikBorclar(), ta=0, tb=0;
+  acik.forEach(function(r){ if(r.yon==="alacak") ta+=r.tutar; else tb+=r.tutar; });
+  var yuk=gelecekTaksitYuku();
+  var b=new Date();
+  var s=[
+    [exUstBaslik("KASA — "+baslik)],
+    [exNot("Hazırlandı: "+b.getDate()+" "+AYLAR[b.getMonth()]+" "+b.getFullYear()+
+           " · "+satirlar.length+" hareket")],
+    [],
+    [exKalin("Toplam gelir"),exParaK(gelir)],
+    [exKalin("Toplam gider"),exParaK(gider)],
+    [exKalin("Kalan"),exParaK(gelir-gider)],
+    [],
+    [exUstBaslik("Açık hesaplar")],
+    ["Açık alacak",exPara(ta)],
+    ["Açık borç",exPara(tb)],
+    ["Gelecek aylara kalan taksit",exPara(yuk)],
+    [exKalin("Her şey dahil"),exParaK(gelir-gider+ta-tb-yuk)]
+  ];
+  if(aylikTablo&&aylikTablo.length){
+    s.push([]);
+    s.push([exUstBaslik("Ay ay")]);
+    s.push([exBaslik("Ay"),exBaslik("Gelir"),exBaslik("Gider"),exBaslik("Kalan")]);
+    var tg=0, td=0;
+    aylikTablo.forEach(function(a){
+      tg+=a.gelir; td+=a.gider;
+      s.push([AYLAR[a.a]+" "+a.y,exPara(a.gelir),exPara(a.gider),exPara(a.gelir-a.gider)]);
+    });
+    s.push([exKalin("TOPLAM"),exParaK(tg),exParaK(td),exParaK(tg-td)]);
+  }
+  return { ad:"Özet", satirlar:s, genislikler:[30,18,18,18] };
+}
+
+function aylikTabloYap(satirlar){
+  var m={}, sira=[];
+  satirlar.forEach(function(x){
+    if(!m[x.anahtar]){ m[x.anahtar]={gelir:0,gider:0,y:x.y,a:x.a}; sira.push(x.anahtar); }
+    if(x.r.tur==="gelir") m[x.anahtar].gelir+=x.pay; else m[x.anahtar].gider+=x.pay;
+  });
+  sira.sort();
+  return sira.map(function(k){ return m[k]; });
+}
+
+function excelAktar(kapsam){
+  var hepsi=tumYayilim(), satirlar, baslik, dosyaAdi;
+  if(kapsam==="ay"){
+    var hedef=ayKey(yil,ay);
+    satirlar=hepsi.filter(function(x){ return x.anahtar===hedef; });
+    baslik=AYLAR[ay]+" "+yil;
+    dosyaAdi="KASA-"+hedef+".xlsx";
+  } else if(kapsam==="yil"){
+    satirlar=hepsi.filter(function(x){ return x.y===yil; });
+    baslik=yil+" yılı";
+    dosyaAdi="KASA-"+yil+".xlsx";
+  } else {
+    satirlar=hepsi;
+    baslik="tüm kayıtlar";
+    dosyaAdi="KASA-komple-"+iso(new Date())+".xlsx";
+  }
+  if(!satirlar.length&&!veri.borclar.length) return null;
+
+  var sayfalar=[];
+  sayfalar.push(ozetSayfasi(baslik,satirlar,kapsam==="ay"?null:aylikTabloYap(satirlar)));
+  sayfalar.push(hareketSayfasi(satirlar,"Hareketler"));
+  sayfalar.push(kategoriSayfasi(satirlar,"Kategoriler"));
+  if(kapsam!=="ay"){
+    var pv=pivotSayfasi(satirlar,"Kategori x Ay");
+    if(pv) sayfalar.push(pv);
+  }
+  var mag={};
+  satirlar.forEach(function(x){
+    if(x.r.tur==="gelir"||!x.r.isyeri) return;
+    if(!mag[x.r.isyeri]) mag[x.r.isyeri]={tutar:0,adet:0};
+    mag[x.r.isyeri].tutar+=x.pay; mag[x.r.isyeri].adet++;
+  });
+  var magListe=Object.keys(mag).sort(function(a,b){ return mag[b].tutar-mag[a].tutar; });
+  if(magListe.length){
+    var ms=[[exBaslik("Nereden"),exBaslik("Kayıt"),exBaslik("Tutar")]];
+    var mt=0;
+    magListe.forEach(function(k){ mt+=mag[k].tutar;
+      ms.push([k,{d:mag[k].adet,t:"n"},exPara(mag[k].tutar)]); });
+    ms.push([exKalin("TOPLAM"),"",exParaK(mt)]);
+    sayfalar.push({ad:"Nereden",satirlar:ms,genislikler:[28,10,16],dondur:1});
+  }
+  var ts=taksitSayfasi(); if(ts) sayfalar.push(ts);
+  var bs=borcSayfasi(); if(bs) sayfalar.push(bs);
+
+  return { blob:KasaExcel.kitapYap(sayfalar), ad:dosyaAdi, sayfa:sayfalar.length,
+           hareket:satirlar.length };
+}
+
+function cizExcel(govde){
+  govde.innerHTML="";
+  var c=el("div","card");
+  c.appendChild(el("p","bilgi",
+    "Raporu Excel dosyası olarak indirir. Özet, hareketler, kategoriler, taksitler ve "+
+    "alacak-borç ayrı sayfalarda; tutarlar ₺ biçiminde, tarihler gerçek tarih olarak gelir."));
+  govde.appendChild(c);
+
+  var secenekler=[
+    ["ay","Bu ay",AYLAR[ay]+" "+yil+" hareketleri"],
+    ["yil","Bu yıl",yil+" yılının tamamı, ay ay dağılım ve kategori x ay tablosu"],
+    ["tum","Komple","Bütün kayıtlar, yıl ve ay özetleriyle"]
+  ];
+  var msg=el("p","durum"); msg.hidden=true;
+
+  secenekler.forEach(function(o){
+    var b=el("button",o[0]==="ay"?"ana genis":"kapatBtn genis"); b.type="button";
+    b.style.marginBottom="8px";
+    b.style.display="block";
+    b.style.textAlign="center";
+    b.textContent=o[1];
+    b.addEventListener("click",function(){
+      msg.hidden=true;
+      b.disabled=true; b.textContent="Hazırlanıyor…";
+      setTimeout(function(){
+        try{
+          var sonuc=excelAktar(o[0]);
+          if(!sonuc){
+            msg.textContent="Bu kapsamda kayıt yok."; msg.className="durum hata"; msg.hidden=false;
+          } else {
+            dosyaIndir(sonuc.ad,"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",sonuc.blob);
+            msg.textContent=sonuc.ad+" indirildi · "+sonuc.sayfa+" sayfa · "+
+              sonuc.hareket+" hareket";
+            msg.className="durum"; msg.hidden=false;
+          }
+        }catch(e){
+          msg.textContent="Dosya oluşturulamadı: "+(e&&e.message?e.message:e);
+          msg.className="durum hata"; msg.hidden=false;
+        }
+        b.disabled=false; b.textContent=o[1];
+      },50);
+    });
+    govde.appendChild(b);
+    var alt=el("p","bilgi",o[2]);
+    alt.style.margin="-4px 0 14px"; alt.style.textAlign="center";
+    govde.appendChild(alt);
+  });
+  govde.appendChild(msg);
+}
+
 // ---------------------------------------------------------------- yedek / ayarlar
 function csvIndir(){
   var satirlar=aySatirlari(yil,ay).slice().sort(function(a,b){ return a.tarih<b.tarih?-1:1; });
@@ -1865,7 +2162,7 @@ function csvIndir(){
 }
 function dosyaIndir(adi,tip,icerik){
   try{
-    var blob=new Blob([icerik],{type:tip});
+    var blob=(icerik instanceof Blob)?icerik:new Blob([icerik],{type:tip});
     var url=URL.createObjectURL(blob);
     var a=document.createElement("a");
     a.href=url; a.download=adi;
@@ -2004,6 +2301,7 @@ $("m-toplam").addEventListener("click",function(){ katmanAc("Toplam rapor",cizTo
 $("elle").addEventListener("click",function(){ katmanAc("Elle gir",cizElleForm); });
 $("tumu").addEventListener("click",function(){ katmanAc("Hareketler",cizHareketler); });
 $("ayarlar").addEventListener("click",function(){ katmanAc("Ayarlar & yedek",cizAyarlar); });
+if($("excelBtn")) $("excelBtn").addEventListener("click",function(){ katmanAc("Excel'e aktar",cizExcel); });
 $("katGeri").addEventListener("click",katmanKapat);
 $("katKapat").addEventListener("click",katmanKapat);
 
