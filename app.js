@@ -15,7 +15,7 @@ var AYLAR=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos"
 var GUNLER=["Pazar","Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi"];
 var TAKSITLER=[1,2,3,4,5,6,8,9,10,12,18,24];
 var ANAHTAR="harcama-defteri-v1";
-var SURUM_ADI="2.1";
+var SURUM_ADI="2.2";
 
 // kategori anahtar kelimeleri (yerel çözümleyici için)
 var IPUCU_GIDER=[
@@ -862,6 +862,14 @@ $("cevir").addEventListener("click",function(){
 var GEMINI_ANAHTAR="kasa-gemini-key", GEMINI_MODEL="kasa-gemini-model";
 var API="https://generativelanguage.googleapis.com/v1beta/";
 
+// Ana ekrana eklenmiş uygulama mı, yoksa tarayıcı sekmesi mi?
+function arayuzUygulama(){
+  try{
+    return window.navigator.standalone===true ||
+      (window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches);
+  }catch(e){ return false; }
+}
+
 function anahtarAl(){ try{ return localStorage.getItem(GEMINI_ANAHTAR)||""; }catch(e){ return ""; } }
 function anahtarYaz(v){ try{ localStorage.setItem(GEMINI_ANAHTAR,v); }catch(e){} }
 function modelAl(){ try{ return localStorage.getItem(GEMINI_MODEL)||""; }catch(e){ return ""; } }
@@ -1274,6 +1282,15 @@ function cizAyarlar(govde){
   c1.appendChild(el("p","bilgi",
     "Bütün kayıtlar sadece bu telefonda duruyor; internete hiçbir şey gönderilmiyor. "+
     "Telefonu değiştirirken ya da tarayıcı verilerini temizlemeden önce yedek al."));
+  if(!arayuzUygulama()){
+    var u=el("p","bilgi");
+    u.style.color="var(--neg)";
+    u.textContent="Şu an tarayıcıda açıksın. Ana ekrana eklediğin KASA ayrı bir hafıza kullanır "+
+      "(iOS böyle çalışır): oradaki kayıtlar burada görünmez. Buradaki kayıtları taşımak için "+
+      "\"Yedek al\" de, sonra uygulamayı açıp \"Yedekten geri yükle\" yap. Sonrasında sadece "+
+      "ana ekrandaki uygulamayı kullan.";
+    c1.appendChild(u);
+  }
   var say=el("div","ozetSatir");
   say.appendChild(el("span",null,"Kayıt sayısı"));
   say.appendChild(el("b",null,veri.kayitlar.length+" hareket · "+veri.borclar.length+" alacak/borç"));
