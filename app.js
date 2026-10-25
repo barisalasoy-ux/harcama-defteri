@@ -16,7 +16,7 @@ var AYLAR=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos"
 var GUNLER=["Pazar","Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi"];
 var TAKSITLER=[1,2,3,4,5,6,8,9,10,12,18,24];
 var ANAHTAR="harcama-defteri-v1";
-var SURUM_ADI="4.6";
+var SURUM_ADI="4.7";
 
 // kategori anahtar kelimeleri (yerel çözümleyici için)
 var IPUCU_GIDER=[
@@ -1535,6 +1535,26 @@ function cumleBol(cumle){
   return parcalar.filter(function(x){ return x.trim(); });
 }
 
+// Sadeleştirilmiş metinden kayıt türünü çıkarır: gider / gelir / alacak / borc.
+// Hem yazı-ses çözümleyicisi hem de fiş-not okuyucu bunu kullanır.
+function turTespit(d){
+  var dt=String(d||"").replace(/\d[\d.,]*/g," ").replace(/\s{2,}/g," ");
+  var odendi=/odedim|odedik|odendi|kapattim|yatirdim/.test(dt);
+  // "kredi kartı borcunu ödedim" -> gider ("borç verdim" hariç)
+  if(odendi&&!/borc verdim/.test(dt)) return "gider";
+  // bana borcu var / borç verdim / alacağım -> ALACAK
+  if(/alacag|borc verdim|borc verecek|bana borclu|bana borcu|bana verecek|borcu var|borclu bana/.test(dt))
+    return "alacak";
+  // borcum var / borçluyum / borç aldım -> BORC
+  if(/borcum|borcluyum|borc aldim|borc cektim|odeyecegim|odemem gerek|vermem gerek/.test(dt))
+    return "borc";
+  if(/cebimde|elimde|kasada|nakit var|param var|birikim|hesabimda|bakiye|acilis/.test(dt))
+    return "gelir";
+  if(/maas|yatti|kazandim|sattim|iade|prim aldim|ikramiye|kira geldi|para geldi|gelir/.test(dt))
+    return "gelir";
+  return "gider";
+}
+
 function cozumle(metin){
   // rakam arasındaki virgülü (1.250,50) bölme
   var kaba=sayiSozcukleri(metin).split(/\n|;|,(?!\s*\d)| ve | ayrıca | bir de /i);
@@ -1559,23 +1579,8 @@ function cozumle(metin){
       if(!isNaN(k)&&(isNaN(tutar)||k>tutar)) tutar=k;
     }
     if(isNaN(tutar)) return;
-    var tip="gider";
     // tür tespitini rakamsız metin üzerinde yap: "bana 1000 borçlu" da yakalansın
-    var dt=d.replace(/\d[\d.,]*/g," ").replace(/\s{2,}/g," ");
-    var odendi=/odedim|odedik|odendi|kapattim|yatirdim/.test(dt);
-    if(odendi&&!/borc verdim/.test(dt)){
-      tip="gider";                       // "kredi kartı borcunu ödedim" -> gider
-    }
-    // bana borcu var / borç verdim / alacağım -> ALACAK
-    else if(/alacag|borc verdim|borc verecek|bana borclu|bana borcu|bana verecek|borcu var|borclu bana/.test(dt))
-      tip="alacak";
-    // borcum var / borçluyum / ödeyeceğim -> BORC
-    else if(/borcum|borcluyum|borc aldim|borc cektim|odeyecegim|odemem gerek|vermem gerek/.test(dt))
-      tip="borc";
-    else if(/cebimde|elimde|kasada|nakit var|param var|birikim|hesabimda|bakiye|acilis/.test(dt))
-      tip="gelir";
-    else if(/maas|yatti|kazandim|sattim|iade|prim aldim|ikramiye|kira geldi|para geldi|gelir/.test(dt))
-      tip="gelir";
+    var tip=turTespit(d);
     // taksit ifadesi kategori tahminini bozmasın
     var dKat=d.replace(/\d*\s*taksit\w*/g," ").replace(/\s{2,}/g," ");
     var kat=tip==="gelir"||tip==="gider"?kategoriBul(dKat,tip==="gelir"?"gelir":"gider"):"";
@@ -1684,17 +1689,30 @@ function kucult(dosya){
 }
 
 function fisIstegi(){
-  return "Bu fotoğraf bir Türkçe market fişi veya faturası. HER ürün satırını tek tek oku, "+
-    "hiçbirini atlama ve birleştirme.\n"+
+  return "Bu fotoğraf ya bir Türkçe market fişi/faturası ya da elle yazılmış bir hesap notu. "+
+    "HER satırı tek tek oku, hiçbirini atlama ve birleştirme. El yazısını da oku.\n"+
     "Yalnızca şu şemada JSON döndür:\n"+
-    '{"isyeri":string,"tarih":"YYYY-AA-GG","kalemler":[{"ad":string,"adet":number,"tutar":number,"kategori":string}]}\n'+
-    "ad: ürünün fişteki adı, marka ve gramaj dahil, okunaklı Türkçeyle (örn. \"Prima Bebek Bezi 5 No 68'li\"). "+
+    '{"isyeri":string,"tarih":"YYYY-AA-GG","kalemler":[{"ad":string,"adet":number,"tutar":number,'+
+    '"kategori":string,"tur":string,"kisi":string}]}\n'+
+    "ad: satırın fişteki/nottaki adı, marka ve gramaj dahil, okunaklı Türkçeyle "+
+    "(örn. \"Prima Bebek Bezi 5 No 68'li\", \"Güney'den borç aldım\"). "+
     "Kısaltmaları makul şekilde aç, uydurma ekleme yapma.\n"+
     "adet: o satırdaki miktar, yoksa 1. tutar: o satırın toplam tutarı, ondalık ayırıcı nokta (149.90).\n"+
-    "isyeri: mağaza adının kısa hali (A101, Migros, BİM), ünvan ekleri olmadan. tarih: fişteki tarih.\n"+
+    "tur: şunlardan biri — gider (para çıktı), gelir (para girdi), "+
+    "alacak (birine borç VERDİM / biri bana borçlu, parayı ileride tahsil edeceğim), "+
+    "borc (birinden borç ALDIM / birine borcum var, ileride ödeyeceğim). "+
+    "Market fişi satırlarının hepsi gider. El yazısı notlarda her satırı cümlesine göre ayrı değerlendir: "+
+    "\"Ayşe'ye borç verdim 500\" → alacak, kisi: \"Ayşe\". "+
+    "\"Güney'den borç aldım 3000\" → borc, kisi: \"Güney\". "+
+    "\"Fırından ekmek 100\" → gider. \"Maaş yattı 50000\" → gelir.\n"+
+    "kisi: tur alacak ya da borc ise karşı tarafın adı, değilse boş string.\n"+
+    "isyeri: mağaza adının kısa hali (A101, Migros, BİM), ünvan ekleri olmadan; el yazısı notta boş. "+
+    "tarih: fişteki tarih.\n"+
     "KDV, ara toplam, toplam, nakit, kredi kartı, para üstü, puan satırlarını kalem sayma; "+
     "bir kalemin kendi indirimi varsa tutarı indirimli yaz.\n"+
-    "kategori şu listeden biri: "+KAT.gider.join(", ")+". "+
+    "kategori: tur gider ise şu listeden biri: "+KAT.gider.join(", ")+". "+
+    "tur gelir ise şu listeden biri: "+KAT.gelir.join(", ")+". "+
+    "tur alacak ya da borc ise kategori boş string olsun.\n"+
     "Örnek eşleştirme: bebek bezi/mama/ıslak mendil → Bebek & Çocuk; deterjan/çamaşır suyu → Temizlik; "+
     "şampuan/diş macunu → Kozmetik & Bakım; bira/şarap/sigara → Alkol & Tütün; gıda → Market.\n"+
     "Emin olmadığın kalemi atla. Hiç kalem okuyamazsan kalemler boş dizi olsun.";
@@ -1773,21 +1791,35 @@ function fisGoster(v){
     var adet=Number(k.adet);
     var ad=String(k.ad==null?"":k.ad).trim().slice(0,70);
     if(isFinite(adet)&&adet>1) ad=ad+" ×"+Math.round(adet);
+    // Tür: modelin söylediği geçerliyse o, ama satırın kendi cümlesi
+    // "borç verdim / borç aldım" diyorsa yerel tespit kazanır.
+    var mt=String(k.tur==null?"":k.tur).toLowerCase().replace("ç","c");
+    if(["gider","gelir","alacak","borc"].indexOf(mt)<0) mt="";
+    var yt=turTespit(sadelestir(ad));
+    var tip=(yt!=="gider")?yt:(mt||"gider");
+    var defter=(tip==="gider"||tip==="gelir");
+    var liste=defter?KAT[tip]:[];
+    var kisi=String(k.kisi==null?"":k.kisi).trim().slice(0,30);
+    if(!defter&&!kisi) kisi=kisiBul(ad);
     return {
-      tip:"gider", tutar:isNaN(t)?0:Math.round(t*100)/100, taksit:1,
-      kategori:KAT.gider.indexOf(k.kategori)>-1?k.kategori:"Diğer", kisi:"",
-      tarih:tarih, isyeri:isyeri, aciklama:ad
+      tip:tip, tutar:isNaN(t)?0:Math.round(t*100)/100, taksit:1,
+      kategori:defter?(liste.indexOf(k.kategori)>-1?k.kategori:liste[liste.length-1]):"",
+      kisi:kisi,
+      tarih:tarih, isyeri:defter?isyeri:"", aciklama:ad
     };
   }).filter(function(k){ return k.tutar>0&&k.aciklama; });
 
   if(!girdiler.length){ durum("Fişten ürün okuyamadım. ✎ ile elle girebilirsin.",true); return; }
   durum("",false);
-  var toplam=girdiler.reduce(function(a,k){ return a+k.tutar; },0);
+  var harcama=0, baska=0;
+  girdiler.forEach(function(k){ if(k.tip==="gider") harcama+=k.tutar; else baska++; });
+  var ozet=(isyeri?isyeri+" · ":"")+gunBasligi(tarih)+" · "+girdiler.length+" kalem";
+  if(harcama) ozet+=" · gider "+para(harcama);
+  if(baska) ozet+=" · "+baska+" tanesi gelir/alacak/borç";
   katmanAc("Fiş kalemleri",function(govde){
     govde.innerHTML="";
     var card=el("div","card");
-    card.appendChild(el("p","ozetUst",
-      (isyeri?isyeri+" · ":"")+gunBasligi(tarih)+" · "+girdiler.length+" kalem · "+para(toplam)));
+    card.appendChild(el("p","ozetUst",ozet));
     incelemeCiz(card,girdiler,function(sonuc){ katmanKapat(); durum(sonuc,false); ciz(); },true);
     govde.appendChild(card);
   });
