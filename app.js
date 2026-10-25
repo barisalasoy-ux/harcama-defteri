@@ -9,13 +9,14 @@ var KAT = {
          "Sağlık","İlaç","Giyim","Kozmetik & Bakım","Temizlik","Ev & Yapı market","Teknoloji","Mobilya",
          "Eğitim","Eğlence","Tatil","Abonelik","Sigorta","Kredi & Taksit","Vergi & Harç","Hediye",
          "Evcil hayvan","Bağış","Alkol & Tütün","Diğer"],
-  gelir:["Maaş","Ek gelir","Prim","Kira geliri","Faiz & Yatırım","Satış","İade","Hediye & Destek","Diğer"]
+  gelir:["Maaş","Nakit mevcut","Ek gelir","Prim","Kira geliri","Faiz & Yatırım","Satış","İade",
+         "Hediye & Destek","Diğer"]
 };
 var AYLAR=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
 var GUNLER=["Pazar","Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi"];
 var TAKSITLER=[1,2,3,4,5,6,8,9,10,12,18,24];
 var ANAHTAR="harcama-defteri-v1";
-var SURUM_ADI="3.2";
+var SURUM_ADI="3.3";
 
 // kategori anahtar kelimeleri (yerel çözümleyici için)
 var IPUCU_GIDER=[
@@ -53,6 +54,8 @@ var IPUCU_GIDER=[
 ];
 var IPUCU_GELIR=[
   ["Maaş",["maaş","maas"]],
+  ["Nakit mevcut",["cebimde","elimde","kasada","nakit var","param var","birikim","mevcut","kalan param",
+                   "açılış","bakiye","hesabımda"]],
   ["Prim",["prim","ikramiye","bonus"]],
   ["Kira geliri",["kira geliri","kiracı","kiradan"]],
   ["Faiz & Yatırım",["faiz","temettü","borsa","altın sattım","kâr payı"]],
@@ -1086,17 +1089,21 @@ function cozumle(metin){
     }
     if(isNaN(tutar)) return;
     var tip="gider";
-    var odendi=/odedim|odedik|odendi|kapattim|yatirdim/.test(d);
-    if(odendi&&!/borc verdim/.test(d)){
+    // tür tespitini rakamsız metin üzerinde yap: "bana 1000 borçlu" da yakalansın
+    var dt=d.replace(/\d[\d.,]*/g," ").replace(/\s{2,}/g," ");
+    var odendi=/odedim|odedik|odendi|kapattim|yatirdim/.test(dt);
+    if(odendi&&!/borc verdim/.test(dt)){
       tip="gider";                       // "kredi kartı borcunu ödedim" -> gider
     }
     // bana borcu var / borç verdim / alacağım -> ALACAK
-    else if(/alacag|borc verdim|borc verecek|bana borclu|bana borcu|bana verecek|borcu var|borclu bana/.test(d))
+    else if(/alacag|borc verdim|borc verecek|bana borclu|bana borcu|bana verecek|borcu var|borclu bana/.test(dt))
       tip="alacak";
     // borcum var / borçluyum / ödeyeceğim -> BORC
-    else if(/borcum|borcluyum|borc aldim|borc cektim|odeyecegim|odemem gerek|vermem gerek/.test(d))
+    else if(/borcum|borcluyum|borc aldim|borc cektim|odeyecegim|odemem gerek|vermem gerek/.test(dt))
       tip="borc";
-    else if(/maas|yatti|kazandim|sattim|iade|prim aldim|ikramiye|kira geldi|para geldi|gelir/.test(d))
+    else if(/cebimde|elimde|kasada|nakit var|param var|birikim|hesabimda|bakiye|acilis/.test(dt))
+      tip="gelir";
+    else if(/maas|yatti|kazandim|sattim|iade|prim aldim|ikramiye|kira geldi|para geldi|gelir/.test(dt))
       tip="gelir";
     var kat=tip==="gelir"||tip==="gider"?kategoriBul(d,tip==="gelir"?"gelir":"gider"):"";
     var temiz=cumle
