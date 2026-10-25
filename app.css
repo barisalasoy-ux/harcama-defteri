@@ -4,6 +4,7 @@
   --fg:#141d27; --muted:#5b6b79; --accent:#1d4e79; --pos:#1d6b4a; --neg:#9d3a2b;
   --font-ui:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   --font-num:ui-monospace,"SF Mono",Consolas,monospace;
+  --vurgu:#e8eef5; --vurguKenar:#bcccdd;
   --r:12px;
   color-scheme:light;
   padding-top:env(safe-area-inset-top,0px);
@@ -13,12 +14,14 @@
   :root:not([data-theme="light"]){
     --bg:#111821; --surface:#19222d; --surface-2:#222e3b; --line:#2d3b4a;
     --fg:#e7edf3; --muted:#93a4b4; --accent:#74b4e6; --pos:#56c08c; --neg:#e68874;
+    --vurgu:#1b2836; --vurguKenar:#35485d;
     color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
   --bg:#111821; --surface:#19222d; --surface-2:#222e3b; --line:#2d3b4a;
   --fg:#e7edf3; --muted:#93a4b4; --accent:#74b4e6; --pos:#56c08c; --neg:#e68874;
+  --vurgu:#1b2836; --vurguKenar:#35485d;
   color-scheme:dark;
 }
 *,*::before,*::after{box-sizing:border-box}
@@ -63,7 +66,12 @@ img{max-width:100%}
 
 .uclu{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;flex:none}
 .mini{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
-  padding:8px 9px;min-width:0;display:flex;flex-direction:column;gap:1px}
+  padding:8px 9px;min-width:0;display:flex;flex-direction:column;gap:1px;
+  text-align:left;font-family:var(--font-ui);color:var(--fg)}
+button.mini{cursor:pointer}
+button.mini:active{opacity:.75}
+.mini.vurgu{background:var(--vurgu);border-color:var(--vurguKenar)}
+.okMini{color:var(--muted);font-weight:400}
 .mini .k{font-size:.62rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600}
 .mini .v{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:.86rem;
   font-weight:600;overflow:hidden;text-overflow:ellipsis}
@@ -191,6 +199,26 @@ h3{font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.11e
 .ozetSatir{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid var(--line)}
 .ozetSatir:first-child{border-top:0}
 .ozetSatir b{font-family:var(--font-num);font-variant-numeric:tabular-nums}
+
+/* hesap dökümü */
+.hesapSatir{display:flex;align-items:center;gap:10px;width:100%;padding:11px 0;
+  border-top:1px solid var(--line);background:none;border-left:0;border-right:0;border-bottom:0;
+  color:var(--fg);font-family:var(--font-ui);text-align:left;min-width:0}
+.hesapSatir:first-child{border-top:0}
+button.hesapSatir{cursor:pointer}
+button.hesapSatir:active{opacity:.7}
+.hesapSol{display:flex;align-items:center;gap:9px;flex:1;min-width:0}
+.hesapIsaret{flex:none;width:20px;height:20px;border-radius:50%;background:var(--surface-2);
+  color:var(--muted);font-family:var(--font-num);font-size:.8rem;font-weight:600;
+  display:flex;align-items:center;justify-content:center}
+.hesapIsaret.arti{color:var(--pos)}
+.hesapIsaret.eksi{color:var(--neg)}
+.hesapAd{font-size:.89rem;min-width:0;overflow-wrap:anywhere}
+.hesapTut{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:.88rem;
+  font-weight:600;white-space:nowrap}
+.hesapSon{border-top:2px solid var(--line);margin-top:2px}
+.hesapSon .hesapAd{font-weight:700;letter-spacing:.04em;font-size:.8rem;color:var(--muted)}
+.hesapSon .hesapTut{font-size:1.05rem}
 
 /* karşılama & kurulum adımları */
 .adim{display:flex;gap:11px;align-items:flex-start;padding:11px 0;border-top:1px solid var(--line)}

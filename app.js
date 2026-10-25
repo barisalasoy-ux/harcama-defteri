@@ -16,7 +16,7 @@ var AYLAR=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos"
 var GUNLER=["Pazar","Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi"];
 var TAKSITLER=[1,2,3,4,5,6,8,9,10,12,18,24];
 var ANAHTAR="harcama-defteri-v1";
-var SURUM_ADI="3.6";
+var SURUM_ADI="3.7";
 
 // kategori anahtar kelimeleri (yerel çözümleyici için)
 var IPUCU_GIDER=[
@@ -214,8 +214,10 @@ function acikBorclar(){ return veri.borclar.filter(function(r){ return r.durum!=
 // ---------------------------------------------------------------- ana ekran
 function cizEv(){
   var b=new Date();
-  $("ayad").querySelector(".ayAdi").textContent=AYLAR[ay]+" "+yil;
-  var altYazi=$("ayad").querySelector(".ayAlt");
+  var adEl=$("ayad").querySelector(".ayAdi"), altYazi=$("ayad").querySelector(".ayAlt");
+  if(!adEl||!altYazi){ $("ayad").textContent=AYLAR[ay]+" "+yil; adEl=null; }
+  if(adEl) adEl.textContent=AYLAR[ay]+" "+yil;
+  if(!altYazi){ altYazi={}; }
   if(yil===b.getFullYear()&&ay===b.getMonth()){
     altYazi.className="ayAlt";
     altYazi.textContent="bugün "+b.getDate()+" "+AYLAR[b.getMonth()]+" "+GUNLER[b.getDay()];
@@ -708,6 +710,91 @@ function kategoriDetay(baslik,satirlar){
     });
     govde.appendChild(kutu);
   });
+}
+
+// "Her şey dahil" neyden oluşuyor
+function cizNetDetay(govde){
+  govde.innerHTML="";
+  var satirlar=aySatirlari(yil,ay), gelir=0, gider=0;
+  satirlar.forEach(function(x){ if(x.r.tur==="gelir") gelir+=x.pay; else gider+=x.pay; });
+  var kalan=gelir-gider;
+  var acik=acikBorclar(), ta=0, tb=0;
+  acik.forEach(function(r){ if(r.yon==="alacak") ta+=r.tutar; else tb+=r.tutar; });
+  var yuk=gelecekTaksitYuku();
+  var net=kalan+ta-tb-yuk;
+
+  govde.appendChild(el("p","ozetUst",
+    AYLAR[ay]+" "+yil+" · bu ayın kalanı ile açık hesapların toplamı"));
+
+  var hesap=el("div","card");
+  function kalem(etiket,tutar,isaret,tiklaFn){
+    var s=el(tiklaFn?"button":"div","hesapSatir");
+    if(tiklaFn){ s.type="button"; s.addEventListener("click",tiklaFn); }
+    var sol=el("div","hesapSol");
+    sol.appendChild(el("span","hesapIsaret"+(isaret==="+"?" arti":(isaret==="−"?" eksi":"")),isaret||""));
+    var m=el("div","hesapAd",etiket);
+    sol.appendChild(m);
+    s.appendChild(sol);
+    var sag=el("span","hesapTut"+(tutar<0?" neg":(tutar>0&&isaret==="+"?" pos":"")),
+      para(Math.abs(tutar)));
+    s.appendChild(sag);
+    if(tiklaFn) s.appendChild(el("span","okMini","›"));
+    hesap.appendChild(s);
+  }
+
+  kalem("Bu ay kalan (gelir − gider)",kalan,kalan<0?"−":"+",function(){
+    katmanAc("Hareketler",cizHareketler);
+  });
+  if(ta) kalem("Açık alacağın",ta,"+",function(){ katmanAc("Alacak & Borç",cizBorc); });
+  if(tb) kalem("Açık borcun",tb,"−",function(){ katmanAc("Alacak & Borç",cizBorc); });
+  if(yuk) kalem("Gelecek aylara kalan taksit",yuk,"−",function(){ katmanAc("Taksitler",cizTaksitler); });
+
+  var son=el("div","hesapSatir hesapSon");
+  son.appendChild(el("div","hesapAd","HER ŞEY DAHİL"));
+  son.appendChild(el("span","hesapTut "+(net>=0?"pos":"neg"),(net<0?"−":"")+para(Math.abs(net))));
+  hesap.appendChild(son);
+  govde.appendChild(hesap);
+
+  var not=el("p","bilgi");
+  not.textContent=net>=0
+    ? "Açık hesapların kapansa ve taksitlerin bitse elinde bu kadar kalır."
+    : "Açık hesapların kapansa ve taksitlerin bitse bu kadar açığın olur.";
+  govde.appendChild(not);
+
+  if(!ta&&!tb&&!yuk){
+    var y=el("p","bilgi");
+    y.textContent="Şu an açık alacak, borç ya da taksit yok; bu yüzden bu ayın kalanıyla aynı.";
+    govde.appendChild(y);
+  }
+}
+
+// Gelecek aylara kalan taksitlerin dökümü
+function cizTaksitler(govde){
+  govde.innerHTML="";
+  var simdi=ayKey(yil,ay), liste=[];
+  veri.kayitlar.forEach(function(r){
+    if(r.tur==="gelir"||!gecerliTarih(r.tarih)) return;
+    var n=taksitSayisi(r); if(n<2) return;
+    var p=r.tarih.split("-"), by=Number(p[0]), ba=Number(p[1])-1;
+    var kalanAdet=0, oduk=0;
+    for(var i=0;i<n;i++){
+      var yy=by+Math.floor((ba+i)/12), aa=(ba+i)%12;
+      if(ayKey(yy,aa)>simdi) kalanAdet++; else oduk++;
+    }
+    if(kalanAdet) liste.push({r:r,pay:r.tutar/n,kalanAdet:kalanAdet,oduk:oduk,adet:n});
+  });
+  if(!liste.length){ govde.appendChild(el("p","durum","Gelecek aylara kalan taksit yok.")); return; }
+  liste.sort(function(a,b){ return (b.kalanAdet*b.pay)-(a.kalanAdet*a.pay); });
+  var toplam=liste.reduce(function(t,x){ return t+x.kalanAdet*x.pay; },0);
+  govde.appendChild(el("p","ozetUst",liste.length+" taksitli harcama · toplam kalan "+para(toplam)));
+  var c=el("div","card");
+  c.appendChild(tablo(["Harcama","Durum","Aylık","Kalan"],
+    liste.map(function(x){
+      return [(x.r.aciklama||x.r.kategori), x.oduk+"/"+x.adet+" ödendi",
+        paraK(x.pay), paraK(x.kalanAdet*x.pay)];
+    }),
+    ["TOPLAM","","",paraK(toplam)]));
+  govde.appendChild(c);
 }
 
 function cizAylikRapor(govde){
@@ -1860,6 +1947,7 @@ function cizAyarlar(govde){
 // ---------------------------------------------------------------- menü
 $("geri").addEventListener("click",function(){ ay--; if(ay<0){ ay=11; yil--; } ciz(); });
 $("ileri").addEventListener("click",function(){ ay++; if(ay>11){ ay=0; yil++; } ciz(); });
+$("netKutu").addEventListener("click",function(){ katmanAc("Her şey dahil",cizNetDetay); });
 $("ayad").addEventListener("click",function(){
   var b=new Date();
   yil=b.getFullYear(); ay=b.getMonth();
