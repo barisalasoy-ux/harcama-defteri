@@ -16,7 +16,7 @@ var AYLAR=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos"
 var GUNLER=["Pazar","Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi"];
 var TAKSITLER=[1,2,3,4,5,6,8,9,10,12,18,24];
 var ANAHTAR="harcama-defteri-v1";
-var SURUM_ADI="4.4";
+var SURUM_ADI="4.5";
 
 // kategori anahtar kelimeleri (yerel çözümleyici için)
 var IPUCU_GIDER=[
@@ -293,7 +293,7 @@ function cizSonlar(){
     b.appendChild(el("div","tut "+(r.tur==="gelir"?"pos":"neg"),(r.tur==="gelir"?"+":"−")+para(r.tutar)));
     b.addEventListener("click",function(){
       var p=r.tarih.split("-"); yil=Number(p[0]); ay=Number(p[1])-1;
-      katmanAc("Hareketler",cizHareketler);
+      katmanAc("Kaydı düzenle",function(govde){ kayitFormu(govde,r); });
     });
     kutu.appendChild(b);
   });
@@ -456,9 +456,13 @@ function hareketSatiri(s){
       {ad:"Sil",sinif:"evet",fn:function(){ sil(r.id); }}
     ]);
   }
-  var e=el("div","hr");
+  var e=el("div","hr tiklanir");
   e.appendChild(el("div","mark"+(r.tur==="gelir"?" g":"")));
   var t=el("div","txt");
+  t.setAttribute("role","button"); t.setAttribute("tabindex","0");
+  t.addEventListener("click",function(){
+    katmanAc("Kaydı düzenle",function(govde){ kayitFormu(govde,r); });
+  });
   t.appendChild(el("div","ad",r.aciklama||r.kategori||"Diğer"));
   var alt=[r.kategori||"Diğer"];
   if(r.isyeri) alt.push(r.isyeri);
@@ -557,9 +561,13 @@ function borcSatiri(r){
       {ad:"Kapat + deftere işle",sinif:"iyi",fn:function(){ bKapat(r,true); }}
     ]);
   }
-  var e=el("div","hr"+(r.durum==="kapandi"?" bitti":""));
+  var e=el("div","hr tiklanir"+(r.durum==="kapandi"?" bitti":""));
   e.appendChild(el("div","mark"+(r.yon==="alacak"?" g":"")));
   var t=el("div","txt");
+  t.setAttribute("role","button"); t.setAttribute("tabindex","0");
+  t.addEventListener("click",function(){
+    katmanAc("Alacak / borç düzenle",function(govde){ borcFormu(govde,r); });
+  });
   t.appendChild(el("div","ad",r.kisi||(r.yon==="alacak"?"Alacak":"Borç")));
   var alt=[];
   if(r.aciklama) alt.push(r.aciklama);
@@ -614,8 +622,12 @@ function bSil(id){
   veri.borclar=veri.borclar.filter(function(r){ return r.id!==id; });
   kaydet(); ciz();
 }
-function cizBorcForm(govde){
+function cizBorcForm(govde){ borcFormu(govde,null); }
+
+function borcFormu(govde,mevcut){
   govde.innerHTML="";
+  var duzenle=!!mevcut;
+  if(duzenle) formYon=mevcut.yon;
   var card=el("div","card");
   var seg=el("div","seg");
   var ba=el("button",null,"Alacağım"), bb=el("button",null,"Borcum");
@@ -632,23 +644,64 @@ function cizBorcForm(govde){
   var tutar=alan(card,"Tutar (₺)","text","0,00"); tutar.inputMode="decimal";
   var vade=alan(card,"Vade tarihi","date","");
   var not=alan(card,"Not (isteğe bağlı)","text","Örn. kombi tamiri");
-  var kaydetBtn=el("button","ana genis","Kaydet"); kaydetBtn.type="button"; card.appendChild(kaydetBtn);
+
+  if(duzenle){
+    kisi.value=mevcut.kisi||"";
+    tutar.value=nf.format(mevcut.tutar);
+    vade.value=gecerliTarih(mevcut.vade)?mevcut.vade:"";
+    not.value=mevcut.aciklama||"";
+  }
+
+  var kaydetBtn=el("button","ana genis",duzenle?"Değişikliği kaydet":"Kaydet");
+  kaydetBtn.type="button"; card.appendChild(kaydetBtn);
   var msg=el("p","durum"); msg.hidden=true; card.appendChild(msg);
   govde.appendChild(card);
 
   kaydetBtn.addEventListener("click",function(){
     var t=parseTutar(tutar.value);
     if(isNaN(t)){ msg.textContent="Geçerli bir tutar yaz."; msg.className="durum hata"; msg.hidden=false; return; }
-    borcEkle({ yon:formYon, kisi:kisi.value.trim(), tutar:t, vade:vade.value||"",
-      aciklama:not.value.trim(), durum:"acik", kapanis:"", olusturma:new Date().toISOString() });
+    if(duzenle){
+      mevcut.yon=formYon; mevcut.kisi=kisi.value.trim(); mevcut.tutar=t;
+      mevcut.vade=vade.value||""; mevcut.aciklama=not.value.trim();
+      kaydet();
+    } else {
+      borcEkle({ yon:formYon, kisi:kisi.value.trim(), tutar:t, vade:vade.value||"",
+        aciklama:not.value.trim(), durum:"acik", kapanis:"", olusturma:new Date().toISOString() });
+    }
     katmanAc("Alacak & Borç",cizBorc);
     cizEv();
   });
+
+  if(duzenle){
+    if(mevcut.durum==="kapandi"){
+      var ac=el("button","kapatBtn genis","Yeniden aç"); ac.type="button";
+      ac.style.marginTop="8px";
+      ac.addEventListener("click",function(){
+        mevcut.durum="acik"; mevcut.kapanis=""; kaydet();
+        katmanAc("Alacak & Borç",cizBorc); cizEv();
+      });
+      govde.appendChild(ac);
+    }
+    var sil=el("button","kapatBtn genis","Bu kaydı sil"); sil.type="button";
+    sil.style.marginTop="8px";
+    var eminMi=false;
+    sil.addEventListener("click",function(){
+      if(!eminMi){ eminMi=true; sil.textContent="Emin misin? Dokun ve silinsin"; return; }
+      veri.borclar=veri.borclar.filter(function(r){ return r.id!==mevcut.id; });
+      kaydet(); katmanAc("Alacak & Borç",cizBorc); cizEv();
+    });
+    govde.appendChild(sil);
+  }
 }
 
 // ---------------------------------------------------------------- elle giriş
-function cizElleForm(govde){
+function cizElleForm(govde){ kayitFormu(govde,null); }
+
+// mevcut=null -> yeni kayıt, dolu -> düzenleme
+function kayitFormu(govde,mevcut){
   govde.innerHTML="";
+  var duzenle=!!mevcut;
+  if(duzenle) formTur=mevcut.tur;
   var card=el("div","card");
   var seg=el("div","seg");
   var bg=el("button",null,"Gider"), bl=el("button",null,"Gelir");
@@ -661,6 +714,7 @@ function cizElleForm(govde){
     kat.innerHTML="";
     KAT[formTur].forEach(function(x){ var o=el("option",null,x); o.value=x; kat.appendChild(o); });
     if(KAT[formTur].indexOf(onceki)>-1) kat.value=onceki;
+    else if(duzenle&&KAT[formTur].indexOf(mevcut.kategori)>-1) kat.value=mevcut.kategori;
     taksitKutu.hidden=formTur!=="gider";
   }
   bg.addEventListener("click",function(){ formTur="gider"; turCiz(); });
@@ -670,7 +724,7 @@ function cizElleForm(govde){
   var tutar=alan(card,"Tutar (₺)","text","0,00"); tutar.inputMode="decimal";
   var ikili=el("div","row2"); card.appendChild(ikili);
   kat=alan(ikili,"Kategori","select");
-  var tarih=alan(ikili,"Tarih","date"); tarih.value=iso(new Date());
+  var tarih=alan(ikili,"Tarih","date");
   taksitKutu=el("div","field");
   taksitKutu.appendChild(el("label",null,"Taksit"));
   var taksit=el("select");
@@ -678,21 +732,59 @@ function cizElleForm(govde){
   taksitKutu.appendChild(taksit); card.appendChild(taksitKutu);
   var acik=alan(card,"Açıklama (isteğe bağlı)","text","Örn. haftalık market");
   var isyeri=alan(card,"Nereden (isteğe bağlı)","text","Örn. A101");
-  var kaydetBtn=el("button","ana genis","Kaydet"); kaydetBtn.type="button"; card.appendChild(kaydetBtn);
+
+  if(duzenle){
+    tutar.value=nf.format(mevcut.tutar);
+    tarih.value=mevcut.tarih;
+    acik.value=mevcut.aciklama||"";
+    isyeri.value=mevcut.isyeri||"";
+    taksit.value=String(taksitSayisi(mevcut));
+  } else {
+    tarih.value=iso(new Date());
+  }
+  turCiz();
+  if(duzenle) kat.value=KAT[formTur].indexOf(mevcut.kategori)>-1?mevcut.kategori:"Diğer";
+
+  var kaydetBtn=el("button","ana genis",duzenle?"Değişikliği kaydet":"Kaydet");
+  kaydetBtn.type="button"; card.appendChild(kaydetBtn);
   var msg=el("p","durum"); msg.hidden=true; card.appendChild(msg);
   govde.appendChild(card);
-  turCiz();
+
+  if(duzenle&&taksitSayisi(mevcut)>1){
+    var not=el("p","bilgi",
+      "Bu kayıt "+taksitSayisi(mevcut)+" taksitli. Yaptığın değişiklik bütün taksitleri etkiler.");
+    govde.appendChild(not);
+  }
 
   kaydetBtn.addEventListener("click",function(){
     var t=parseTutar(tutar.value);
     if(isNaN(t)){ msg.textContent="Geçerli bir tutar yaz."; msg.className="durum hata"; msg.hidden=false; return; }
     var td=tarih.value||iso(new Date());
-    kayitEkle({ tur:formTur, tutar:t, taksit:formTur==="gider"?Number(taksit.value):1,
+    var veriObj={ tur:formTur, tutar:t, taksit:formTur==="gider"?Number(taksit.value):1,
       kategori:kat.value||"Diğer", tarih:td, aciklama:acik.value.trim(),
-      isyeri:isyeri.value.trim(), olusturma:new Date().toISOString() });
+      isyeri:isyeri.value.trim() };
+    if(duzenle){
+      for(var k in veriObj) if(veriObj.hasOwnProperty(k)) mevcut[k]=veriObj[k];
+      kaydet();
+    } else {
+      veriObj.olusturma=new Date().toISOString();
+      kayitEkle(veriObj);
+    }
     var p=td.split("-"); yil=Number(p[0]); ay=Number(p[1])-1;
-    katmanKapat(); durum("Kayıt eklendi.",false); ciz();
+    katmanKapat(); durum(duzenle?"Kayıt güncellendi.":"Kayıt eklendi.",false); ciz();
   });
+
+  if(duzenle){
+    var sil=el("button","kapatBtn genis","Bu kaydı sil"); sil.type="button";
+    sil.style.marginTop="8px";
+    var eminMi=false;
+    sil.addEventListener("click",function(){
+      if(!eminMi){ eminMi=true; sil.textContent="Emin misin? Dokun ve silinsin"; return; }
+      veri.kayitlar=veri.kayitlar.filter(function(r){ return r.id!==mevcut.id; });
+      kaydet(); katmanKapat(); durum("Kayıt silindi.",false); ciz();
+    });
+    govde.appendChild(sil);
+  }
 }
 
 // ---------------------------------------------------------------- raporlar
