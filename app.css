@@ -25,6 +25,8 @@
   color-scheme:dark;
 }
 *,*::before,*::after{box-sizing:border-box}
+/* Çift dokunuşla yakınlaştırmayı kapat; iki parmakla yakınlaştırma çalışmaya devam eder */
+*{touch-action:manipulation}
 html,body{height:100%}
 body{
   margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-ui);
