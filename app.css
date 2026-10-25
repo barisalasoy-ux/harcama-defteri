@@ -172,17 +172,48 @@ h3{font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.11e
 .bos strong{display:block;color:var(--fg);font-weight:600;margin-bottom:4px}
 .bos p{margin:0;font-size:.85rem}
 
-.tbl{width:100%;border-collapse:collapse;font-size:.88rem}
+.tbl{width:100%;border-collapse:collapse;font-size:.82rem}
 .tbl th{font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);
   font-weight:600;text-align:left;padding:0 0 7px}
 .tbl td{padding:7px 0;border-top:1px solid var(--line)}
 .tbl th.sag,.tbl td.sag{text-align:right}
 .tbl td.sag{font-family:var(--font-num);font-variant-numeric:tabular-nums}
 .tbl tr.toplam td{border-top:2px solid var(--line);font-weight:600}
-.tbl td.ad{max-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tbl td.ad,.tbl th:first-child{min-width:6.5em;white-space:normal;overflow-wrap:anywhere}
+.tbl td.sag,.tbl th.sag{white-space:nowrap;padding-left:10px}
 .ozetSatir{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid var(--line)}
 .ozetSatir:first-child{border-top:0}
 .ozetSatir b{font-family:var(--font-num);font-variant-numeric:tabular-nums}
+
+/* raporlar */
+.grafik svg{width:100%;height:118px;display:block}
+.grafik .eksen{stroke:var(--line);stroke-width:1}
+.grafik .barGelir{fill:var(--pos)}
+.grafik .barGider{fill:var(--neg)}
+.grafik .gEtiket{fill:var(--muted);font-size:9px;font-family:var(--font-ui)}
+.lejant{display:flex;gap:14px;margin-top:8px;font-size:.74rem;color:var(--muted)}
+.lejant span{display:flex;align-items:center;gap:5px}
+.lejant i{width:9px;height:9px;border-radius:2px;display:inline-block}
+.lejant .kutuGelir{background:var(--pos)}
+.lejant .kutuGider{background:var(--neg)}
+
+.barlar{display:flex;flex-direction:column;gap:12px}
+.barSatir{display:block;width:100%;text-align:left;background:none;border:0;padding:0;
+  color:var(--fg);font-family:var(--font-ui);min-width:0}
+button.barSatir{cursor:pointer}
+button.barSatir:active{opacity:.7}
+.barUst{display:flex;justify-content:space-between;gap:10px;align-items:baseline;min-width:0}
+.barAd{font-size:.89rem;font-weight:500;min-width:0;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.barTut{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:.85rem;
+  font-weight:600;white-space:nowrap}
+.track{height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden;margin:5px 0 3px}
+.fill{height:100%;background:var(--neg);border-radius:3px}
+.fill.g{background:var(--pos)}
+.barAlt{display:flex;justify-content:space-between;gap:10px;font-size:.73rem;color:var(--muted)}
+.degisim{font-family:var(--font-num);white-space:nowrap}
+.degisim.artis{color:var(--neg)}
+.degisim.azalis{color:var(--pos)}
 
 .kalem{display:grid;grid-template-columns:auto 1fr auto;gap:7px 9px;align-items:center;
   padding:9px 0;border-top:1px solid var(--line);min-width:0}
