@@ -16,7 +16,7 @@ var AYLAR=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos"
 var GUNLER=["Pazar","Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi"];
 var TAKSITLER=[1,2,3,4,5,6,8,9,10,12,18,24];
 var ANAHTAR="harcama-defteri-v1";
-var SURUM_ADI="3.8";
+var SURUM_ADI="3.9";
 
 // kategori anahtar kelimeleri (yerel çözümleyici için)
 var IPUCU_GIDER=[
@@ -36,8 +36,11 @@ var IPUCU_GIDER=[
   ["Giyim",["giyim","kıyafet","ayakkabı","pantolon","gömlek","mont","elbise","çorap"]],
   ["Kozmetik & Bakım",["şampuan","kuaför","berber","kozmetik","parfüm","krem","tıraş"]],
   ["Temizlik",["deterjan","temizlik","çamaşır suyu","bulaşık","peçete","poşet"]],
-  ["Ev & Yapı market",["yapı market","boya","vida","hırdavat","koçtaş","bauhaus","ampul","musluk"]],
-  ["Teknoloji",["bilgisayar","kulaklık","şarj","kablo","telefon aldım","tablet","yazıcı","elektronik"]],
+  ["Ev & Yapı market",["yapı market","boya","vida","hırdavat","koçtaş","bauhaus","ampul","musluk",
+                       "çamaşır makinesi","bulaşık makinesi","buzdolabı","derin dondurucu","klima",
+                       "kombi","ocak","davlumbaz","beyaz eşya","elektrikli süpürge","ütü","su ısıtıcı"]],
+  ["Teknoloji",["bilgisayar","kulaklık","şarj","kablo","telefon aldım","tablet","yazıcı","elektronik",
+                "televizyon","monitör","konsol","akıllı saat","hoparlör"]],
   ["Mobilya",["mobilya","koltuk","masa","dolap","yatak","sandalye","halı"]],
   ["Eğitim",["okul","kurs","kitap","eğitim","kırtasiye","ders","üniversite"]],
   ["Eğlence",["sinema","eğlence","oyun","konser","maç","tiyatro","lunapark"]],
@@ -1104,6 +1107,9 @@ function tarihBul(d){
   }
   return iso(bugunD);
 }
+// Kelime sonunda kalabilecek geçerli Türkçe ekler (gevşek eşleşme için)
+var EKLER_SON=/^(|[aeıioöuü]|de|da|te|ta|den|dan|ten|tan|ye|ya|yi|yı|yu|yü|ler|lar|in|ın|un|ün|nin|nın|nun|nün|le|la|yle|yla|si|sı|su|sü|im|ım|um|üm|miz|mız|muz|müz|niz|nız|nuz|nüz|ndan|nden|na|ne|ni|nı|nu|nü)$/;
+
 function kelimeVar(metin,kelime){
   // tam kelime eşleşmesi: "taksit" içindeki "taksi" eşleşmesin
   var k=sadelestir(kelime).replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
@@ -1111,17 +1117,37 @@ function kelimeVar(metin,kelime){
 }
 function kategoriBul(d,tur){
   var liste=tur==="gelir"?IPUCU_GELIR:IPUCU_GIDER;
+  // Önce çok kelimeli ifadeler: "bulaşık makinesi" tek başına "bulaşık"ı yensin
+  var cokluEslesme=null, enUzun=0;
+  for(var c=0;c<liste.length;c++){
+    for(var e=0;e<liste[c][1].length;e++){
+      var ifade=liste[c][1][e];
+      if(ifade.indexOf(" ")<0) continue;
+      if(d.indexOf(sadelestir(ifade))>-1&&ifade.length>enUzun){
+        enUzun=ifade.length; cokluEslesme=liste[c][0];
+      }
+    }
+  }
+  if(cokluEslesme) return cokluEslesme;
   for(var i=0;i<liste.length;i++){
     var kelimeler=liste[i][1];
     for(var j=0;j<kelimeler.length;j++){
       if(kelimeVar(d,kelimeler[j])) return liste[i][0];
     }
   }
-  // tam eşleşme yoksa gevşek ara (çekim ekli haller: "markete", "eczaneden")
+  // tam eşleşme yoksa çekim ekli hâlleri dene: "markete", "eczaneden".
+  // Kelimenin sonunda kalan parça gerçek bir Türkçe ek olmalı; böylece
+  // "taksitle" içindeki "taksi" gibi yanlış eşleşmeler elenir.
   for(var a=0;a<liste.length;a++){
     for(var b=0;b<liste[a][1].length;b++){
       var kk=sadelestir(liste[a][1][b]);
-      if(kk.length>3&&d.indexOf(kk)>-1) return liste[a][0];
+      if(kk.length<4) continue;
+      var re=new RegExp("(^|[^a-z0-9])"+kk.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"([a-z]*)","g");
+      var m;
+      while((m=re.exec(d))!==null){
+        if(EKLER_SON.test(m[2])) return liste[a][0];
+        re.lastIndex=m.index+m[0].length;
+      }
     }
   }
   return "Diğer";
@@ -1227,7 +1253,9 @@ function cozumle(metin){
       tip="gelir";
     else if(/maas|yatti|kazandim|sattim|iade|prim aldim|ikramiye|kira geldi|para geldi|gelir/.test(dt))
       tip="gelir";
-    var kat=tip==="gelir"||tip==="gider"?kategoriBul(d,tip==="gelir"?"gelir":"gider"):"";
+    // taksit ifadesi kategori tahminini bozmasın
+    var dKat=d.replace(/\d*\s*taksit\w*/g," ").replace(/\s{2,}/g," ");
+    var kat=tip==="gelir"||tip==="gider"?kategoriBul(dKat,tip==="gelir"?"gelir":"gider"):"";
     var temiz=cumle
       .replace(/ay[ıi]n\s+\d{1,2}\s*['’]?\s*[a-zçğıöşü]*/gi,"")
       .replace(/\d{1,2}\s*taksit/gi,"")
