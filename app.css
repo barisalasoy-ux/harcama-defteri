@@ -225,6 +225,19 @@ button.hesapSatir:active{opacity:.7}
 .hesapSon .hesapAd{font-weight:700;letter-spacing:.04em;font-size:.8rem;color:var(--muted)}
 .hesapSon .hesapTut{font-size:1.05rem}
 
+/* ay seçici */
+.ayOge{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  padding:11px 13px;margin-bottom:7px;color:var(--fg);font-family:var(--font-ui);
+  text-align:left;cursor:pointer;min-width:0}
+.ayOge:active{opacity:.7}
+.ayOge.secili{border-color:var(--accent);background:var(--vurgu)}
+.ayOgeSol{min-width:0}
+.ayOgeAd{font-size:.95rem;font-weight:600}
+.ayOgeAlt{font-size:.75rem;color:var(--muted)}
+.ayOgeSag{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex:none}
+.ayOgeSag .tut{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:.82rem;font-weight:600}
+
 /* karşılama & kurulum adımları */
 .adim{display:flex;gap:11px;align-items:flex-start;padding:11px 0;border-top:1px solid var(--line)}
 .adim:first-child{border-top:0;padding-top:2px}

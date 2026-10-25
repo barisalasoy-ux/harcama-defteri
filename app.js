@@ -16,7 +16,7 @@ var AYLAR=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos"
 var GUNLER=["Pazar","Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi"];
 var TAKSITLER=[1,2,3,4,5,6,8,9,10,12,18,24];
 var ANAHTAR="harcama-defteri-v1";
-var SURUM_ADI="4.5";
+var SURUM_ADI="4.6";
 
 // kategori anahtar kelimeleri (yerel çözümleyici için)
 var IPUCU_GIDER=[
@@ -221,6 +221,88 @@ function vadeDurum(r){
 }
 function acikBorclar(){ return veri.borclar.filter(function(r){ return r.durum!=="kapandi"; }); }
 
+// Pazartesi başlangıçlı hafta: verilen tarihin haftasının ilk günü
+function haftaBasi(isoTarih){
+  var p=String(isoTarih).split("-");
+  var d=new Date(Number(p[0]),Number(p[1])-1,Number(p[2]));
+  var g=(d.getDay()+6)%7;          // Pazartesi=0
+  d.setDate(d.getDate()-g);
+  return iso(d);
+}
+function haftaEtiketi(bas){
+  var p=bas.split("-");
+  var b=new Date(Number(p[0]),Number(p[1])-1,Number(p[2]));
+  var s=new Date(b); s.setDate(s.getDate()+6);
+  if(b.getMonth()===s.getMonth())
+    return b.getDate()+"\u2013"+s.getDate()+" "+AYLAR[b.getMonth()];
+  return b.getDate()+" "+AYLAR[b.getMonth()].slice(0,3)+" \u2013 "+
+         s.getDate()+" "+AYLAR[s.getMonth()].slice(0,3);
+}
+
+// Kayıt bulunan ayların listesi — ay seçici için
+function dolguAylar(){
+  var m={};
+  veri.kayitlar.forEach(function(r){
+    taksitYayilimi(r).forEach(function(x){
+      if(!m[x.anahtar]) m[x.anahtar]={y:x.y,a:x.a,gelir:0,gider:0,adet:0};
+      if(r.tur==="gelir") m[x.anahtar].gelir+=x.pay; else m[x.anahtar].gider+=x.pay;
+      m[x.anahtar].adet++;
+    });
+  });
+  var simdi=ayKey(yil,ay);
+  if(!m[simdi]) m[simdi]={y:yil,a:ay,gelir:0,gider:0,adet:0};
+  var b=new Date(), bugunKey=ayKey(b.getFullYear(),b.getMonth());
+  if(!m[bugunKey]) m[bugunKey]={y:b.getFullYear(),a:b.getMonth(),gelir:0,gider:0,adet:0};
+  return Object.keys(m).sort().reverse().map(function(k){
+    var o=m[k]; o.anahtar=k; return o;
+  });
+}
+
+function cizAySecici(govde,sonra){
+  govde.innerHTML="";
+  var hepsi=dolguAylar();
+  var b0=new Date(), simdiKey=ayKey(b0.getFullYear(),b0.getMonth());
+  var gecmis=hepsi.filter(function(o){ return o.anahtar<=simdiKey; });   // yeniden eskiye
+  var ileri=hepsi.filter(function(o){ return o.anahtar>simdiKey; })
+                 .sort(function(a,b){ return a.anahtar<b.anahtar?-1:1; });
+  govde.appendChild(el("p","ozetUst",hepsi.length+" ay \u00b7 bir aya dokunup se\u00e7"));
+
+  function ayYaz(liste,basligiAtla){
+    var sonYil=null;
+    liste.forEach(function(o){
+      if(o.y!==sonYil&&!basligiAtla){
+        sonYil=o.y;
+        govde.appendChild(el("h3",null,String(o.y)));
+      }
+      govde.appendChild(ayOgesi(o));
+    });
+  }
+  ayYaz(gecmis);
+  if(ileri.length){
+    govde.appendChild(el("h3",null,"İleri aylar · taksitler"));
+    ayYaz(ileri,true);
+  }
+
+  function ayOgesi(o){
+    var b=el("button","ayOge"); b.type="button";
+    if(o.anahtar===ayKey(yil,ay)) b.classList.add("secili");
+    var sol=el("div","ayOgeSol");
+    sol.appendChild(el("div","ayOgeAd",AYLAR[o.a]+(o.anahtar>simdiKey?" "+o.y:"")));
+    sol.appendChild(el("div","ayOgeAlt",o.adet?(o.adet+" hareket"):"kayıt yok"));
+    b.appendChild(sol);
+    var sag=el("div","ayOgeSag");
+    if(o.gider) sag.appendChild(el("div","tut neg","\u2212"+kisaPara(o.gider)+" \u20ba"));
+    if(o.gelir) sag.appendChild(el("div","tut pos","+"+kisaPara(o.gelir)+" \u20ba"));
+    b.appendChild(sag);
+    b.addEventListener("click",function(){
+      yil=o.y; ay=o.a; aramaKapsam="ay";
+      if(sonra) sonra(); else katmanKapat();
+      ciz();
+    });
+    return b;
+  }
+}
+
 // ---------------------------------------------------------------- ana ekran
 function cizEv(){
   var b=new Date();
@@ -358,11 +440,12 @@ function cizHareketler(govde){
   araKutu.appendChild(alan1);
 
   var seg=el("div","seg"); seg.style.marginBottom="0";
-  var sAy=el("button",null,AYLAR[ay]+" "+yil), sTum=el("button",null,"Tüm zamanlar");
+  var sAy=el("button",null,AYLAR[ay]+" "+yil+" \u25be"), sTum=el("button",null,"Tüm zamanlar");
   sAy.type="button"; sTum.type="button";
   function segCiz(){
     sAy.setAttribute("aria-pressed",aramaKapsam==="ay"?"true":"false");
     sTum.setAttribute("aria-pressed",aramaKapsam==="tum"?"true":"false");
+    sAy.textContent=AYLAR[ay]+" "+yil+" \u25be";
   }
   seg.appendChild(sAy); seg.appendChild(sTum);
   araKutu.appendChild(seg);
@@ -444,7 +527,11 @@ function cizHareketler(govde){
   }
 
   giris.addEventListener("input",function(){ aramaMetin=this.value; listeCiz(); });
-  sAy.addEventListener("click",function(){ aramaKapsam="ay"; segCiz(); listeCiz(); });
+  sAy.addEventListener("click",function(){
+    katmanAc("Ay seç",function(g){
+      cizAySecici(g,function(){ katmanAc("Hareketler",cizHareketler); });
+    });
+  });
   sTum.addEventListener("click",function(){ aramaKapsam="tum"; segCiz(); listeCiz(); });
   segCiz(); listeCiz();
 }
@@ -1065,6 +1152,32 @@ function cizAylikRapor(govde){
       c.appendChild(n);
     }
     b.appendChild(c); govde.appendChild(b);
+  }
+
+  // haftalara göre
+  var haftaM={};
+  satirlar.forEach(function(x){
+    if(x.r.tur==="gelir") return;
+    var hb=haftaBasi(x.tarih);
+    if(!haftaM[hb]) haftaM[hb]={tutar:0,adet:0,satirlar:[]};
+    haftaM[hb].tutar+=x.pay; haftaM[hb].adet++; haftaM[hb].satirlar.push(x);
+  });
+  var haftaAnahtar=Object.keys(haftaM).sort();
+  if(haftaAnahtar.length>1){
+    var hb2=el("section");
+    hb2.appendChild(el("h3",null,"Haftalara göre"));
+    var hc=el("div","card");
+    hc.appendChild(barListesi(haftaAnahtar.map(function(k){
+      return { ad:haftaEtiketi(k), tutar:haftaM[k].tutar, adet:haftaM[k].adet,
+               satirlar:haftaM[k].satirlar };
+    }), gider, function(o){
+      kategoriDetay(o.ad,o.satirlar);
+    }, ""));
+    var ortH=gider/haftaAnahtar.length;
+    var hn=el("p","bilgi","Haftalık ortalama "+para(ortH)+".");
+    hn.style.margin="10px 0 0";
+    hc.appendChild(hn);
+    hb2.appendChild(hc); govde.appendChild(hb2);
   }
 
   // kategoriler (önceki aya göre değişimle)
