@@ -15,7 +15,7 @@ var AYLAR=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos"
 var GUNLER=["Pazar","Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi"];
 var TAKSITLER=[1,2,3,4,5,6,8,9,10,12,18,24];
 var ANAHTAR="harcama-defteri-v1";
-var SURUM_ADI="1.1";
+var SURUM_ADI="1.2";
 
 // kategori anahtar kelimeleri (yerel çözümleyici için)
 var IPUCU_GIDER=[
@@ -737,20 +737,66 @@ function kisiBul(cumle){
   }
   return "";
 }
+// Bir cümlede birden fazla "para tutarı" varsa cümleyi o tutarlara göre böler.
+// "Markete 400 TL verdim Ahmet'in de borcu var bana 1000 TL" -> iki parça.
+var FIIL=/^(verdim|verdik|odedim|odedik|aldim|aldik|harcadim|yatirdim|cektim|gitti|yatti|geldi|kaldi|var|oldu)$/;
+function tutarYerleri(cumle){
+  var d=sadelestir(cumle), yerler=[], re=/(^|[^a-z0-9])(\d[\d.,]*)(?=[^a-z0-9]|$)/g, m;
+  while((m=re.exec(d))!==null){
+    var bas=m.index+m[1].length, son=bas+m[2].length;
+    var oncesi=d.slice(Math.max(0,bas-12),bas);
+    var sonrasi=d.slice(son,son+14);
+    var tarihMi=/ayin\s*$/.test(oncesi)||/^\s*[./]\d/.test(sonrasi)||/[./]$/.test(oncesi)
+      ||/^\d{1,2}[./]\d{1,2}([./]\d{2,4})?$/.test(m[2]);   // 15.11 ya da 15.11.2026
+    var taksitMi=/^\s*(taksit|tane|adet|numara|no\b|kisi)/.test(sonrasi);
+    if(!tarihMi&&!taksitMi&&!isNaN(parseTutar(m[2]))) yerler.push({bas:bas,son:son});
+    re.lastIndex=son;
+  }
+  return yerler;
+}
+function cumleBol(cumle){
+  var yerler=tutarYerleri(cumle);
+  if(yerler.length<2) return [cumle];
+  var d=sadelestir(cumle), parcalar=[], basla=0;
+  for(var i=0;i<yerler.length-1;i++){
+    // Tutardan sonraki birim ve fiili bu parçada bırak, kalanı sonraki parçaya ver
+    var p=yerler[i].son;
+    var kuyruk=d.slice(p,yerler[i+1].bas);
+    var kelimeler=kuyruk.split(/\s+/).filter(function(x){ return x; });
+    var kaydir=0, alinan=0;
+    for(var j=0;j<kelimeler.length&&alinan<2;j++){
+      var k=kelimeler[j].replace(/[^a-z]/g,"");
+      if(!k) continue;
+      if(k==="tl"||k==="lira"||FIIL.test(k)){
+        kaydir=kuyruk.indexOf(kelimeler[j])+kelimeler[j].length;
+        alinan++;
+      } else break;
+    }
+    var kes=p+(kaydir||0);
+    parcalar.push(cumle.slice(basla,kes));
+    basla=kes;
+  }
+  parcalar.push(cumle.slice(basla));
+  return parcalar.filter(function(x){ return x.trim(); });
+}
+
 function cozumle(metin){
   // rakam arasındaki virgülü (1.250,50) bölme
-  var parcalar=String(metin).split(/\n|;|,(?!\s*\d)| ve | ayrıca /i);
+  var kaba=String(metin).split(/\n|;|,(?!\s*\d)| ve | ayrıca | bir de /i);
+  var parcalar=[];
+  kaba.forEach(function(c){ cumleBol(c).forEach(function(x){ parcalar.push(x); }); });
   var sonuc=[];
   parcalar.forEach(function(cumle){
     cumle=cumle.trim();
     if(!cumle) return;
     var d=sadelestir(cumle);
     // harfe yapışık sayıları (a101, 5 numara gibi) atla
-    var sayilar=[], re=/(^|[^a-z0-9])(\d[\d.,]*)(?=[^a-z0-9]|$)/g, m;
-    while((m=re.exec(d))!==null){ sayilar.push(m[2]); re.lastIndex=m.index+m[0].length; }
-    if(!sayilar.length) return;
+    // tarih ve taksit sayılarını eleyip gerçek tutarları al
+    var yerler=tutarYerleri(cumle);
+    var sayilar=yerler.map(function(y){ return d.slice(y.bas,y.son); });
     var taksitM=d.match(/(\d{1,2})\s*taksit/);
     var taksit=taksitM?Math.min(60,Number(taksitM[1])):1;
+    if(!sayilar.length) return;
     var tutar=NaN;
     for(var i=0;i<sayilar.length;i++){
       if(taksitM&&sayilar[i]===taksitM[1]) continue;
