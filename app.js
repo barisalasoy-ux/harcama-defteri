@@ -15,7 +15,7 @@ var AYLAR=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos"
 var GUNLER=["Pazar","Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi"];
 var TAKSITLER=[1,2,3,4,5,6,8,9,10,12,18,24];
 var ANAHTAR="harcama-defteri-v1";
-var SURUM_ADI="1.5";
+var SURUM_ADI="2.0";
 
 // kategori anahtar kelimeleri (yerel çözümleyici için)
 var IPUCU_GIDER=[
@@ -858,6 +858,255 @@ $("cevir").addEventListener("click",function(){
   });
 });
 
+// ---------------------------------------------------------------- fiş okuma (Gemini)
+var GEMINI_ANAHTAR="kasa-gemini-key", GEMINI_MODEL="kasa-gemini-model";
+var API="https://generativelanguage.googleapis.com/v1beta/";
+
+function anahtarAl(){ try{ return localStorage.getItem(GEMINI_ANAHTAR)||""; }catch(e){ return ""; } }
+function anahtarYaz(v){ try{ localStorage.setItem(GEMINI_ANAHTAR,v); }catch(e){} }
+function modelAl(){ try{ return localStorage.getItem(GEMINI_MODEL)||""; }catch(e){ return ""; } }
+function modelYaz(v){ try{ localStorage.setItem(GEMINI_MODEL,v); }catch(e){} }
+
+// Hesapta hangi görsel okuyabilen model varsa onu bul (model adları zamanla değişiyor)
+function modelBul(anahtar){
+  return fetch(API+"models?key="+encodeURIComponent(anahtar))
+    .then(function(y){
+      if(!y.ok) return y.json().then(function(h){ throw h; },function(){ throw {status:y.status}; });
+      return y.json();
+    })
+    .then(function(o){
+      var liste=(o.models||[]).filter(function(m){
+        return (m.supportedGenerationMethods||[]).indexOf("generateContent")>-1
+          && /flash/i.test(m.name) && !/thinking|audio|image-generation|tts|embedding|live/i.test(m.name);
+      }).map(function(m){ return m.name.replace(/^models\//,""); });
+      if(!liste.length) throw {hata:"model-yok"};
+      // önce lite olmayan, sonra en yüksek sürüm
+      function puan(ad){
+        var s=0;
+        if(!/lite/i.test(ad)) s+=100;
+        if(!/preview|exp/i.test(ad)) s+=20;
+        var v=ad.match(/(\d+(?:\.\d+)?)/);
+        if(v) s+=parseFloat(v[1]);
+        return s;
+      }
+      liste.sort(function(a,b){ return puan(b)-puan(a); });
+      return liste[0];
+    });
+}
+
+// Fotoğrafı küçült: hem hızlı gitsin hem kota yemesin
+function kucult(dosya){
+  return new Promise(function(coz,red){
+    var fr=new FileReader();
+    fr.onerror=function(){ red({hata:"okunamadi"}); };
+    fr.onload=function(){
+      var img=new Image();
+      img.onerror=function(){ red({hata:"okunamadi"}); };
+      img.onload=function(){
+        var enBuyuk=1600, o=Math.min(1,enBuyuk/Math.max(img.width,img.height));
+        var w=Math.round(img.width*o), h=Math.round(img.height*o);
+        var c=document.createElement("canvas"); c.width=w; c.height=h;
+        c.getContext("2d").drawImage(img,0,0,w,h);
+        var veri=c.toDataURL("image/jpeg",0.82);
+        coz(veri.slice(veri.indexOf(",")+1));
+      };
+      img.src=fr.result;
+    };
+    fr.readAsDataURL(dosya);
+  });
+}
+
+function fisIstegi(){
+  return "Bu fotoğraf bir Türkçe market fişi veya faturası. HER ürün satırını tek tek oku, "+
+    "hiçbirini atlama ve birleştirme.\n"+
+    "Yalnızca şu şemada JSON döndür:\n"+
+    '{"isyeri":string,"tarih":"YYYY-AA-GG","kalemler":[{"ad":string,"adet":number,"tutar":number,"kategori":string}]}\n'+
+    "ad: ürünün fişteki adı, marka ve gramaj dahil, okunaklı Türkçeyle (örn. \"Prima Bebek Bezi 5 No 68'li\"). "+
+    "Kısaltmaları makul şekilde aç, uydurma ekleme yapma.\n"+
+    "adet: o satırdaki miktar, yoksa 1. tutar: o satırın toplam tutarı, ondalık ayırıcı nokta (149.90).\n"+
+    "isyeri: mağaza adının kısa hali (A101, Migros, BİM), ünvan ekleri olmadan. tarih: fişteki tarih.\n"+
+    "KDV, ara toplam, toplam, nakit, kredi kartı, para üstü, puan satırlarını kalem sayma; "+
+    "bir kalemin kendi indirimi varsa tutarı indirimli yaz.\n"+
+    "kategori şu listeden biri: "+KAT.gider.join(", ")+". "+
+    "Örnek eşleştirme: bebek bezi/mama/ıslak mendil → Bebek & Çocuk; deterjan/çamaşır suyu → Temizlik; "+
+    "şampuan/diş macunu → Kozmetik & Bakım; bira/şarap/sigara → Alkol & Tütün; gıda → Market.\n"+
+    "Emin olmadığın kalemi atla. Hiç kalem okuyamazsan kalemler boş dizi olsun.";
+}
+
+function geminiSor(anahtar,model,b64){
+  var govde={
+    contents:[{parts:[{text:fisIstegi()},{inline_data:{mime_type:"image/jpeg",data:b64}}]}],
+    generationConfig:{temperature:0.1,responseMimeType:"application/json"}
+  };
+  return fetch(API+"models/"+model+":generateContent?key="+encodeURIComponent(anahtar),{
+    method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(govde)
+  }).then(function(y){
+    return y.json().then(function(o){
+      if(!y.ok) throw (o&&o.error)?o.error:{status:y.status};
+      return o;
+    },function(){ throw {status:y.status}; });
+  }).then(function(o){
+    var c=o.candidates&&o.candidates[0];
+    var metin=c&&c.content&&c.content.parts&&c.content.parts.map(function(p){ return p.text||""; }).join("");
+    if(!metin) throw {hata:"bos"};
+    var bas=metin.indexOf("{"), son=metin.lastIndexOf("}");
+    if(bas<0||son<bas) throw {hata:"json"};
+    return JSON.parse(metin.slice(bas,son+1));
+  });
+}
+
+function fisHata(e){
+  if(!e) return "Bir şeyler ters gitti.";
+  if(e.hata==="okunamadi") return "Fotoğraf okunamadı, tekrar çek.";
+  if(e.hata==="json"||e.hata==="bos") return "Fişi çözemedim. Düz ve net bir kare dene.";
+  if(e.hata==="model-yok") return "Hesabında fiş okuyabilen model yok. Ayarlar'dan anahtarı kontrol et.";
+  var kod=e.code||e.status;
+  if(kod===400) return "API anahtarı geçersiz görünüyor. Ayarlar'dan kontrol et.";
+  if(kod===403) return "Anahtar reddedildi. Google AI Studio'da anahtarın aktif mi bak.";
+  if(kod===429) return "Günlük ücretsiz hakkın dolmuş. Yarın tekrar dene ya da elle gir.";
+  if(kod===404) return "Model bulunamadı. Ayarlar'dan \"Modeli yenile\"ye dokun.";
+  if(kod>=500) return "Google tarafında geçici sorun. Birazdan tekrar dene.";
+  return "Bağlanamadım. İnternetini kontrol et.";
+}
+
+function fisOku(dosya){
+  var anahtar=anahtarAl();
+  if(!anahtar){ katmanAc("Fiş okuma kurulumu",cizGeminiKurulum); return; }
+  $("foto").disabled=true;
+  durum("Fişi okuyorum, 10-30 saniye sürebilir…",false);
+  kucult(dosya).then(function(b64){
+    var model=modelAl();
+    var p=model?Promise.resolve(model):modelBul(anahtar).then(function(m){ modelYaz(m); return m; });
+    return p.then(function(m){
+      return geminiSor(anahtar,m,b64).catch(function(e){
+        // model eskimişse bir kez yenile ve tekrar dene
+        if((e.code||e.status)!==404) throw e;
+        return modelBul(anahtar).then(function(m2){
+          modelYaz(m2);
+          return geminiSor(anahtar,m2,b64);
+        });
+      });
+    });
+  }).then(function(v){
+    $("foto").disabled=false;
+    fisGoster(v||{});
+  }).catch(function(e){
+    $("foto").disabled=false;
+    durum(fisHata(e),true);
+  });
+}
+
+function fisGoster(v){
+  var tarih=gecerliTarih(v.tarih)?v.tarih:iso(new Date());
+  var isyeri=String(v.isyeri==null?"":v.isyeri).trim().slice(0,40);
+  var ham=Array.isArray(v.kalemler)?v.kalemler:[];
+  var girdiler=ham.map(function(k){
+    k=k||{};
+    var t=typeof k.tutar==="number"?k.tutar:parseTutar(k.tutar);
+    var adet=Number(k.adet);
+    var ad=String(k.ad==null?"":k.ad).trim().slice(0,70);
+    if(isFinite(adet)&&adet>1) ad=ad+" ×"+Math.round(adet);
+    return {
+      tip:"gider", tutar:isNaN(t)?0:Math.round(t*100)/100, taksit:1,
+      kategori:KAT.gider.indexOf(k.kategori)>-1?k.kategori:"Diğer", kisi:"",
+      tarih:tarih, isyeri:isyeri, aciklama:ad
+    };
+  }).filter(function(k){ return k.tutar>0&&k.aciklama; });
+
+  if(!girdiler.length){ durum("Fişten ürün okuyamadım. ✎ ile elle girebilirsin.",true); return; }
+  durum("",false);
+  var toplam=girdiler.reduce(function(a,k){ return a+k.tutar; },0);
+  katmanAc("Fiş kalemleri",function(govde){
+    govde.innerHTML="";
+    var card=el("div","card");
+    card.appendChild(el("p","ozetUst",
+      (isyeri?isyeri+" · ":"")+gunBasligi(tarih)+" · "+girdiler.length+" kalem · "+para(toplam)));
+    incelemeCiz(card,girdiler,function(sonuc){ katmanKapat(); durum(sonuc,false); ciz(); },true);
+    govde.appendChild(card);
+  });
+}
+
+function cizGeminiKurulum(govde){
+  govde.innerHTML="";
+  var c=el("div","card");
+  c.appendChild(el("p","bilgi",
+    "Fiş okuma için Google'ın ücretsiz Gemini anahtarı gerekiyor. Anahtar yalnızca bu telefonda "+
+    "saklanır, hiçbir yere gönderilmez. Alması 2 dakika:"));
+  var ol=el("div");
+  ["1. aistudio.google.com/apikey adresine gir",
+   "2. Google hesabınla giriş yap",
+   "3. \"Create API key\" / \"API anahtarı oluştur\"a bas",
+   "4. Çıkan uzun yazıyı kopyala, aşağıya yapıştır"].forEach(function(s){
+    var p=el("p","bilgi",s); p.style.margin="0 0 5px"; ol.appendChild(p);
+  });
+  c.appendChild(ol);
+  var baglanti=el("a",null,"aistudio.google.com/apikey");
+  baglanti.href="https://aistudio.google.com/apikey";
+  baglanti.target="_blank"; baglanti.rel="noopener";
+  baglanti.style.color="var(--accent)"; baglanti.style.fontWeight="600";
+  baglanti.style.display="block"; baglanti.style.margin="4px 0 12px";
+  c.appendChild(baglanti);
+
+  var giris=alan(c,"Gemini API anahtarı","text","AIza…");
+  giris.value=anahtarAl();
+  var kaydetBtn=el("button","ana genis","Kaydet ve test et"); kaydetBtn.type="button";
+  c.appendChild(kaydetBtn);
+  var msg=el("p","durum"); msg.hidden=true; c.appendChild(msg);
+  govde.appendChild(c);
+
+  kaydetBtn.addEventListener("click",function(){
+    var v=giris.value.trim();
+    if(!v){ msg.textContent="Anahtarı yapıştır."; msg.className="durum hata"; msg.hidden=false; return; }
+    kaydetBtn.disabled=true; kaydetBtn.textContent="Deneniyor…";
+    msg.hidden=true;
+    modelBul(v).then(function(m){
+      anahtarYaz(v); modelYaz(m);
+      msg.textContent="Bağlandı. Model: "+m+" — artık 📷 ile fiş çekebilirsin.";
+      msg.className="durum"; msg.hidden=false;
+      kaydetBtn.textContent="Kaydedildi";
+    }).catch(function(e){
+      msg.textContent=fisHata(e&&e.error?e.error:e);
+      msg.className="durum hata"; msg.hidden=false;
+      kaydetBtn.disabled=false; kaydetBtn.textContent="Kaydet ve test et";
+    });
+  });
+
+  if(anahtarAl()){
+    var sil=el("button","kapatBtn genis","Anahtarı sil"); sil.type="button";
+    sil.style.marginTop="8px";
+    sil.addEventListener("click",function(){
+      anahtarYaz(""); modelYaz("");
+      giris.value="";
+      msg.textContent="Anahtar silindi."; msg.className="durum"; msg.hidden=false;
+    });
+    govde.appendChild(sil);
+    var yenile=el("button","kapatBtn genis","Modeli yenile"); yenile.type="button";
+    yenile.style.marginTop="8px";
+    yenile.addEventListener("click",function(){
+      yenile.textContent="Aranıyor…";
+      modelBul(anahtarAl()).then(function(m){
+        modelYaz(m); yenile.textContent="Model: "+m;
+      }).catch(function(e){
+        yenile.textContent="Modeli yenile";
+        msg.textContent=fisHata(e); msg.className="durum hata"; msg.hidden=false;
+      });
+    });
+    govde.appendChild(yenile);
+  }
+}
+
+$("foto").addEventListener("click",function(){
+  if(!anahtarAl()){ katmanAc("Fiş okuma kurulumu",cizGeminiKurulum); return; }
+  $("fis-input").click();
+});
+["fis-input","fis-galeri"].forEach(function(id){
+  $(id).addEventListener("change",function(){
+    var f=this.files&&this.files[0];
+    this.value="";
+    if(f) fisOku(f);
+  });
+});
+
 // ---------------------------------------------------------------- mikrofon
 function mikrofonKur(){
   var ST=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -898,7 +1147,7 @@ function mikrofonKur(){
 }
 
 // ---------------------------------------------------------------- inceleme listesi
-function incelemeCiz(card,girdiler,bitti){
+function incelemeCiz(card,girdiler,bitti,tekSecenek){
   var satirlar=[];
   girdiler.forEach(function(g){
     var satir=el("div","kalem");
@@ -941,9 +1190,36 @@ function incelemeCiz(card,girdiler,bitti){
   var ekle=el("button","ana","Seçilenleri ekle"); ekle.type="button";
   var vaz=el("button","kapatBtn","Vazgeç"); vaz.type="button";
   vaz.addEventListener("click",function(){ katmanKapat(); durum("",false); });
-  islem.appendChild(ekle); islem.appendChild(vaz);
+  islem.appendChild(ekle);
+  var tek=null;
+  if(tekSecenek){
+    tek=el("button","kapatBtn","Toplamı tek kayıt yap"); tek.type="button";
+    islem.appendChild(tek);
+  }
+  islem.appendChild(vaz);
   card.appendChild(islem);
   var msg=el("p","durum"); msg.hidden=true; card.appendChild(msg);
+
+  if(tek) tek.addEventListener("click",function(){
+    var toplam=0, katT={}, tarih=null, isyeri="", simdi=new Date().toISOString();
+    satirlar.forEach(function(s){
+      if(!s.cb.checked) return;
+      if(s.tip.value!=="gider") return;
+      var t=parseTutar(s.tut.value);
+      if(isNaN(t)) return;
+      toplam+=t;
+      katT[s.kat.value]=(katT[s.kat.value]||0)+t;
+      if(!tarih) tarih=s.tarih.value||iso(new Date());
+      if(!isyeri) isyeri=s.isyeri||"";
+    });
+    if(!toplam){ msg.textContent="Hiç kalem seçilmedi."; msg.hidden=false; return; }
+    var enCok=Object.keys(katT).sort(function(a,b){ return katT[b]-katT[a]; })[0];
+    kayitEkle({ tur:"gider", tutar:Math.round(toplam*100)/100, taksit:1,
+      kategori:enCok||"Diğer", tarih:tarih, aciklama:(isyeri||"Fiş")+" alışverişi",
+      isyeri:isyeri, olusturma:simdi });
+    var p=tarih.split("-"); yil=Number(p[0]); ay=Number(p[1])-1;
+    bitti("Fiş toplamı tek kayıt olarak eklendi.");
+  });
 
   ekle.addEventListener("click",function(){
     var sayac=0, ilk=null, simdi=new Date().toISOString();
@@ -1003,6 +1279,16 @@ function cizAyarlar(govde){
   say.appendChild(el("b",null,veri.kayitlar.length+" hareket · "+veri.borclar.length+" alacak/borç"));
   c1.appendChild(say);
   govde.appendChild(c1);
+
+  var fisBtn=el("button","ana genis",anahtarAl()?"Fiş okuma ayarları":"Fiş okumayı aç (Gemini)");
+  fisBtn.type="button";
+  fisBtn.addEventListener("click",function(){ katmanAc("Fiş okuma kurulumu",cizGeminiKurulum); });
+  govde.appendChild(fisBtn);
+  if(anahtarAl()){
+    var gal=el("button","kapatBtn genis","Galeriden fiş seç"); gal.type="button";
+    gal.addEventListener("click",function(){ katmanKapat(); $("fis-galeri").click(); });
+    govde.appendChild(gal);
+  }
 
   var b1=el("button","ana genis","Yedek al (JSON)"); b1.type="button";
   b1.addEventListener("click",function(){

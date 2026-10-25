@@ -64,7 +64,7 @@ img{max-width:100%}
 .kutu{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:11px;
   display:flex;flex-direction:column;gap:8px;flex:none}
 #girdi{width:100%;min-height:54px;resize:none}
-.girisAlt{display:grid;grid-template-columns:1fr auto auto;gap:8px}
+.girisAlt{display:grid;grid-template-columns:1fr auto auto auto;gap:7px}
 input,select,textarea{
   width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:10px;
   background:var(--bg);color:var(--fg);font-family:var(--font-ui);font-size:1rem;min-width:0;
@@ -76,7 +76,8 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-vis
   font-family:var(--font-ui);font-size:.92rem;font-weight:600;padding:10px 15px;cursor:pointer;white-space:nowrap}
 .ana:disabled{opacity:.5}
 .ikon{border:1px solid var(--line);background:var(--surface-2);color:var(--fg);border-radius:10px;
-  padding:10px 13px;font-size:1.05rem;cursor:pointer;line-height:1}
+  padding:10px 12px;font-size:1.05rem;cursor:pointer;line-height:1}
+.ikon:disabled{opacity:.5;cursor:progress}
 .ikon.dinliyor{background:var(--neg);border-color:var(--neg);color:#fff;animation:nabiz 1s infinite}
 @keyframes nabiz{50%{opacity:.55}}
 .menu{display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:none}

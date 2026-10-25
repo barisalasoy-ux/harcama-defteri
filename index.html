@@ -44,11 +44,15 @@
     <textarea id="girdi" rows="2" placeholder="markete 420 lira verdim, Ali'den 1500 alacağım var ayın 30'una"></textarea>
     <div class="girisAlt">
       <button type="button" class="ana" id="cevir">Kayda çevir</button>
+      <button type="button" class="ikon" id="foto" title="Fiş çek" aria-label="Fiş fotoğrafı çek">📷</button>
       <button type="button" class="ikon" id="mikrofon" title="Konuş" aria-label="Konuşarak gir">🎙</button>
       <button type="button" class="ikon" id="elle" title="Elle gir" aria-label="Elle gir">✎</button>
     </div>
     <p class="durum" id="durum" hidden></p>
   </div>
+
+  <input type="file" id="fis-input" accept="image/*" capture="environment" hidden>
+  <input type="file" id="fis-galeri" accept="image/*" hidden>
 
   <div class="menu">
     <button type="button" id="m-hareket">Hareketler <span class="ok">›</span></button>
