@@ -16,7 +16,7 @@ var AYLAR=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos"
 var GUNLER=["Pazar","Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi"];
 var TAKSITLER=[1,2,3,4,5,6,8,9,10,12,18,24];
 var ANAHTAR="harcama-defteri-v1";
-var SURUM_ADI="4.1";
+var SURUM_ADI="4.2";
 
 // kategori anahtar kelimeleri (yerel çözümleyici için)
 var IPUCU_GIDER=[
@@ -436,6 +436,22 @@ function cizBorc(govde){
   ekleBtn.addEventListener("click",function(){ katmanAc("Yeni alacak / borç",cizBorcForm); });
   govde.appendChild(ekleBtn);
 
+  var vadeli=acik.filter(function(r){ return gecerliTarih(r.vade); });
+  if(vadeli.length){
+    var tk=el("button","kapatBtn genis","Vadeleri telefon takvimine ekle ("+vadeli.length+")");
+    tk.type="button";
+    var tkNot=el("p","bilgi",
+      "Takvime eklersen vade günü ve bir gün öncesinde telefonun bildirim gönderir.");
+    tkNot.style.margin="6px 0 0"; tkNot.style.textAlign="center";
+    tk.addEventListener("click",function(){
+      var n=vadeleriTakvimeEkle();
+      tkNot.textContent=n
+        ? n+" vade takvim dosyası olarak indirildi; dosyayı açıp Takvim'e ekle."
+        : "Takvim dosyası oluşturulamadı.";
+    });
+    govde.appendChild(tk); govde.appendChild(tkNot);
+  }
+
   if(kapali.length){
     var b2=el("section");
     b2.appendChild(el("h3",null,"Kapanmış"));
@@ -479,6 +495,15 @@ function borcSatiri(r){
   }
   e.appendChild(sag);
   if(r.durum!=="kapandi"){
+    if(gecerliTarih(r.vade)){
+      var tkb=el("button","kapatBtn","⏰"); tkb.type="button";
+      tkb.setAttribute("aria-label","Vadeyi takvime ekle"); tkb.title="Takvime ekle";
+      tkb.addEventListener("click",function(ev){
+        ev.stopPropagation();
+        takvimeGonder([borcEtkinligi(r)],"kasa-"+(r.kisi||"vade")+".ics");
+      });
+      e.appendChild(tkb);
+    }
     var kb=el("button","kapatBtn",r.yon==="alacak"?"Tahsil":"Ödendi"); kb.type="button";
     kb.addEventListener("click",function(){ kapatAdayi=r.id; bSilAdayi=null; ciz(); });
     e.appendChild(kb);
@@ -807,6 +832,17 @@ function cizTaksitler(govde){
     }),
     ["TOPLAM","","",paraK(toplam)]));
   govde.appendChild(c);
+
+  var tk=el("button","kapatBtn genis","Taksit günlerini takvime ekle"); tk.type="button";
+  var tkNot=el("p","bilgi","Her taksit için o gün ve bir gün önce telefon bildirimi gelir.");
+  tkNot.style.margin="6px 0 0"; tkNot.style.textAlign="center";
+  tk.addEventListener("click",function(){
+    var n=taksitleriTakvimeEkle();
+    tkNot.textContent=n
+      ? n+" taksit günü takvim dosyası olarak indirildi; dosyayı açıp Takvim'e ekle."
+      : "Eklenecek gelecek taksit yok.";
+  });
+  govde.appendChild(tk); govde.appendChild(tkNot);
 }
 
 function cizAylikRapor(govde){
@@ -1849,6 +1885,92 @@ function incelemeCiz(card,girdiler,bitti,tekSecenek){
     if(ilk){ var p=ilk.split("-"); yil=Number(p[0]); ay=Number(p[1])-1; }
     bitti(sayac+" kayıt eklendi.");
   });
+}
+
+// ---------------------------------------------------------------- takvim hatırlatması
+// Telefonun kendi takvimine etkinlik ekler; bildirimi işletim sistemi gönderir.
+function icsKacis(m){
+  return String(m==null?"":m).replace(/\\/g,"\\\\").replace(/;/g,"\;")
+    .replace(/,/g,"\\,").replace(/\r?\n/g,"\\n");
+}
+function icsZaman(isoTarih,saat){
+  var p=String(isoTarih).split("-");
+  if(p.length!==3) return null;
+  return p[0]+p[1]+p[2]+"T"+String(saat||10).padStart(2,"0")+"0000";
+}
+function icsDamga(){
+  var d=new Date();
+  function i(n){ return String(n).padStart(2,"0"); }
+  return d.getUTCFullYear()+i(d.getUTCMonth()+1)+i(d.getUTCDate())+"T"+
+    i(d.getUTCHours())+i(d.getUTCMinutes())+i(d.getUTCSeconds())+"Z";
+}
+// etkinlikler: [{id, tarih, baslik, not, saat}]
+function icsKur(etkinlikler){
+  var s=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//KASA//Harcama Defteri//TR",
+         "CALSCALE:GREGORIAN","METHOD:PUBLISH"];
+  etkinlikler.forEach(function(e){
+    var bas=icsZaman(e.tarih,e.saat);
+    if(!bas) return;
+    s.push("BEGIN:VEVENT");
+    s.push("UID:kasa-"+e.id+"@alasoy");
+    s.push("DTSTAMP:"+icsDamga());
+    s.push("DTSTART:"+bas);
+    s.push("DURATION:PT30M");
+    s.push("SUMMARY:"+icsKacis(e.baslik));
+    if(e.not) s.push("DESCRIPTION:"+icsKacis(e.not));
+    // vade günü ve bir gün önce uyarı
+    s.push("BEGIN:VALARM","TRIGGER:-PT0M","ACTION:DISPLAY",
+           "DESCRIPTION:"+icsKacis(e.baslik),"END:VALARM");
+    s.push("BEGIN:VALARM","TRIGGER:-P1D","ACTION:DISPLAY",
+           "DESCRIPTION:"+icsKacis("Yarın: "+e.baslik),"END:VALARM");
+    s.push("END:VEVENT");
+  });
+  s.push("END:VCALENDAR");
+  return s.join("\r\n");
+}
+function takvimeGonder(etkinlikler,dosyaAdi){
+  if(!etkinlikler.length) return 0;
+  var metin=icsKur(etkinlikler);
+  var blob=new Blob([metin],{type:"text/calendar;charset=utf-8"});
+  try{
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement("a");
+    a.href=url; a.download=dosyaAdi; a.rel="noopener";
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){
+      // iOS'ta indirme açılmazsa dosyayı doğrudan aç (Takvim devralır)
+      if(arayuzUygulama()&&/iPad|iPhone|iPod/.test(navigator.userAgent||"")){
+        try{ window.location.href=url; }catch(e){}
+      }
+      setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); },4000);
+    },300);
+  }catch(e){ return 0; }
+  return etkinlikler.length;
+}
+function borcEtkinligi(r){
+  var yon=r.yon==="alacak"?"Tahsil":"Ödeme";
+  return { id:r.id, tarih:r.vade, saat:10,
+    baslik:"KASA · "+yon+": "+(r.kisi||"-")+" "+nf.format(r.tutar)+" ₺",
+    not:(r.aciklama?r.aciklama+" — ":"")+
+        (r.yon==="alacak"?"Bu tutarı tahsil edeceksin.":"Bu tutarı ödeyeceksin.") };
+}
+function vadeleriTakvimeEkle(){
+  var e=acikBorclar().filter(function(r){ return gecerliTarih(r.vade); }).map(borcEtkinligi);
+  return takvimeGonder(e,"kasa-vadeler.ics");
+}
+function taksitleriTakvimeEkle(){
+  var simdi=ayKey(yil,ay), e=[];
+  veri.kayitlar.forEach(function(r){
+    if(r.tur==="gelir"||taksitSayisi(r)<2) return;
+    taksitYayilimi(r).forEach(function(x){
+      if(x.anahtar<=simdi) return;
+      e.push({ id:r.id+"-"+x.sira, tarih:x.tarih, saat:10,
+        baslik:"KASA · Taksit "+x.sira+"/"+x.adet+": "+(r.aciklama||r.kategori)+" "+
+               nf.format(x.pay)+" ₺",
+        not:"Toplam "+nf.format(r.tutar)+" ₺ · "+x.adet+" taksit" });
+    });
+  });
+  return takvimeGonder(e,"kasa-taksitler.ics");
 }
 
 // ---------------------------------------------------------------- Excel aktarımı
