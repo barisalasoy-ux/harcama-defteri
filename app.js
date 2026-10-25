@@ -16,7 +16,7 @@ var AYLAR=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos"
 var GUNLER=["Pazar","Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi"];
 var TAKSITLER=[1,2,3,4,5,6,8,9,10,12,18,24];
 var ANAHTAR="harcama-defteri-v1";
-var SURUM_ADI="4.7";
+var SURUM_ADI="4.8";
 
 // kategori anahtar kelimeleri (yerel çözümleyici için)
 var IPUCU_GIDER=[
@@ -1754,12 +1754,9 @@ function fisHata(e){
   return "Bağlanamadım. İnternetini kontrol et.";
 }
 
-function fisOku(dosya){
-  var anahtar=anahtarAl();
-  if(!anahtar){ katmanAc("Fiş okuma kurulumu",cizGeminiKurulum); return; }
-  $("foto").disabled=true;
-  durum("Fişi okuyorum, 10-30 saniye sürebilir…",false);
-  kucult(dosya).then(function(b64){
+// Tek fotoğrafı Gemini'ye okutur, kalemleri döndürür.
+function fisTek(anahtar,dosya){
+  return kucult(dosya).then(function(b64){
     var model=modelAl();
     var p=model?Promise.resolve(model):modelBul(anahtar).then(function(m){ modelYaz(m); return m; });
     return p.then(function(m){
@@ -1772,16 +1769,48 @@ function fisOku(dosya){
         });
       });
     });
-  }).then(function(v){
-    $("foto").disabled=false;
-    fisGoster(v||{});
-  }).catch(function(e){
-    $("foto").disabled=false;
-    durum(fisHata(e),true);
   });
 }
 
-function fisGoster(v){
+// Bir ya da birden fazla fotoğraf: sırayla okunur, hepsi tek listede toplanır.
+function fisOku(dosyalar){
+  var liste=(dosyalar&&dosyalar.length!==undefined)?Array.prototype.slice.call(dosyalar):[dosyalar];
+  liste=liste.filter(Boolean).slice(0,15);
+  if(!liste.length) return;
+  var anahtar=anahtarAl();
+  if(!anahtar){ katmanAc("Fiş okuma kurulumu",cizGeminiKurulum); return; }
+  $("foto").disabled=true;
+  var girdiler=[], basliklar=[], hatali=0, sonHata=null;
+
+  function ilerle(i){
+    if(i>=liste.length) return Promise.resolve();
+    durum(liste.length>1
+      ? ("Fotoğraf "+(i+1)+"/"+liste.length+" okunuyor…")
+      : "Fişi okuyorum, 10-30 saniye sürebilir…",false);
+    return fisTek(anahtar,liste[i]).then(function(v){
+      var p=fisGirdileri(v||{});
+      if(p.girdiler.length){
+        girdiler=girdiler.concat(p.girdiler);
+        if(p.isyeri) basliklar.push(p.isyeri);
+      } else hatali++;
+    }).catch(function(e){ hatali++; sonHata=e; })
+      .then(function(){ return ilerle(i+1); });
+  }
+
+  ilerle(0).then(function(){
+    $("foto").disabled=false;
+    if(!girdiler.length){
+      durum(sonHata?fisHata(sonHata):"Fotoğraftan kalem okuyamadım. ✎ ile elle girebilirsin.",true);
+      return;
+    }
+    durum("",false);
+    var not=hatali?(hatali+" fotoğraf okunamadı. "):"";
+    fisGoster(girdiler,basliklar.join(", "),not);
+  });
+}
+
+// Gemini yanıtını uygulamanın kayıt taslaklarına çevirir.
+function fisGirdileri(v){
   var tarih=gecerliTarih(v.tarih)?v.tarih:iso(new Date());
   var isyeri=String(v.isyeri==null?"":v.isyeri).trim().slice(0,40);
   var ham=Array.isArray(v.kalemler)?v.kalemler:[];
@@ -1808,12 +1837,14 @@ function fisGoster(v){
       tarih:tarih, isyeri:defter?isyeri:"", aciklama:ad
     };
   }).filter(function(k){ return k.tutar>0&&k.aciklama; });
+  return {girdiler:girdiler, isyeri:isyeri, tarih:tarih};
+}
 
-  if(!girdiler.length){ durum("Fişten ürün okuyamadım. ✎ ile elle girebilirsin.",true); return; }
-  durum("",false);
+function fisGoster(girdiler,isyeri,not){
+  var tarih=girdiler.length?girdiler[0].tarih:iso(new Date());
   var harcama=0, baska=0;
   girdiler.forEach(function(k){ if(k.tip==="gider") harcama+=k.tutar; else baska++; });
-  var ozet=(isyeri?isyeri+" · ":"")+gunBasligi(tarih)+" · "+girdiler.length+" kalem";
+  var ozet=(not||"")+(isyeri?isyeri+" · ":"")+gunBasligi(tarih)+" · "+girdiler.length+" kalem";
   if(harcama) ozet+=" · gider "+para(harcama);
   if(baska) ozet+=" · "+baska+" tanesi gelir/alacak/borç";
   katmanAc("Fiş kalemleri",function(govde){
@@ -2055,17 +2086,73 @@ function cizKarsilama(govde){
   govde.appendChild(bitir);
 }
 
-$("foto").addEventListener("click",function(){
-  if(!anahtarAl()){ katmanAc("Fiş okuma kurulumu",cizGeminiKurulum); return; }
-  $("fis-input").click();
-});
-["fis-input","fis-galeri"].forEach(function(id){
-  $(id).addEventListener("change",function(){
-    var f=this.files&&this.files[0];
-    this.value="";
-    if(f) fisOku(f);
+// Gizli dosya girişleri: HTML'de yoksa (eski önbellek) burada oluşturulur.
+function dosyaGirdisi(id,kabul,coklu,kamera){
+  var e=$(id);
+  if(!e){
+    e=document.createElement("input");
+    e.type="file"; e.id=id; e.hidden=true;
+    document.body.appendChild(e);
+  }
+  e.accept=kabul;
+  if(coklu) e.setAttribute("multiple","multiple"); else e.removeAttribute("multiple");
+  if(kamera) e.setAttribute("capture","environment"); else e.removeAttribute("capture");
+  return e;
+}
+
+function dosyaGirdileriKur(){
+  var kamera=dosyaGirdisi("fis-input","image/*",false,true);
+  var galeri=dosyaGirdisi("fis-galeri","image/*",true,false);
+  var belge =dosyaGirdisi("fis-belge",".csv,.txt,.xlsx,.xls,.docx,.json,text/csv,text/plain",false,false);
+  [kamera,galeri].forEach(function(e){
+    if(e.dataset.kasa) return;
+    e.dataset.kasa="1";
+    e.addEventListener("change",function(){
+      // input temizlenince FileList boşalır: önce diziye kopyala
+      var f=this.files?Array.prototype.slice.call(this.files):[];
+      this.value="";
+      if(f.length) fisOku(f);
+    });
   });
+  if(!belge.dataset.kasa){
+    belge.dataset.kasa="1";
+    belge.addEventListener("change",function(){
+      var f=this.files&&this.files[0]; this.value="";
+      if(f) belgeAktar(f);
+    });
+  }
+  return {kamera:kamera, galeri:galeri, belge:belge};
+}
+
+// Foto butonu: kamera / galeri / dosya seçimi
+function cizKaynakSec(govde){
+  govde.innerHTML="";
+  var g=dosyaGirdileriKur();
+  var card=el("div","card");
+  function secenek(ikon,baslik,alt,islev){
+    var b=el("button","adim secBtn"); b.type="button";
+    b.appendChild(el("div","secIkon",ikon));
+    var t=el("div","adimIc");
+    t.appendChild(el("div","adimBas",baslik));
+    t.appendChild(el("div","adimAlt",alt));
+    b.appendChild(t);
+    b.addEventListener("click",function(){ katmanKapat(); islev(); });
+    card.appendChild(b);
+  }
+  secenek("📷","Fotoğraf çek","Kasada hemen çek, sonra karışmasın",function(){ g.kamera.click(); });
+  secenek("🖼","Galeriden seç","Biriken fişleri birden fazla seçebilirsin",function(){ g.galeri.click(); });
+  secenek("📄","Dosyadan aktar","Excel, CSV, Word ya da yedek dosyası — internetsiz",function(){ g.belge.click(); });
+  govde.appendChild(card);
+  var not=el("p","bilgi",
+    "Fotoğraf okuma Gemini anahtarı ister ve internete bağlanır. "+
+    "Dosyadan aktarma tamamen telefonda çalışır, anahtar gerekmez.");
+  govde.appendChild(not);
+}
+
+$("foto").addEventListener("click",function(){
+  katmanAc("Nereden ekleyelim?",cizKaynakSec);
 });
+dosyaGirdileriKur();
 
 // ---------------------------------------------------------------- mikrofon
 function mikrofonKur(){
@@ -2203,6 +2290,443 @@ function incelemeCiz(card,girdiler,bitti,tekSecenek){
     if(!sayac){ msg.textContent="Hiç kayıt seçilmedi."; msg.hidden=false; return; }
     if(ilk){ var p=ilk.split("-"); yil=Number(p[0]); ay=Number(p[1])-1; }
     bitti(sayac+" kayıt eklendi.");
+  });
+}
+
+// ================================================================ dosyadan aktarma
+// Excel (.xlsx), CSV, Word (.docx), düz metin ve KASA yedeği (.json).
+// Tamamı cihazda çalışır: internet de, API anahtarı da gerekmez.
+
+function dosyaMetni(dosya){
+  return new Promise(function(coz,red){
+    var fr=new FileReader();
+    fr.onerror=function(){ red({hata:"okunamadi"}); };
+    fr.onload=function(){ coz(String(fr.result||"")); };
+    fr.readAsText(dosya,"utf-8");
+  });
+}
+function dosyaTamponu(dosya){
+  return new Promise(function(coz,red){
+    var fr=new FileReader();
+    fr.onerror=function(){ red({hata:"okunamadi"}); };
+    fr.onload=function(){ coz(fr.result); };
+    fr.readAsArrayBuffer(dosya);
+  });
+}
+
+// ---- zip: xlsx ve docx birer zip dosyası
+function sisir(veri){
+  if(typeof DecompressionStream==="undefined") return Promise.reject({hata:"eski-tarayici"});
+  var akis=new Blob([veri]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+  return new Response(akis).arrayBuffer().then(function(b){ return new Uint8Array(b); });
+}
+function zipOku(buf){
+  var u8=new Uint8Array(buf), dv=new DataView(buf), son=-1;
+  for(var i=u8.length-22;i>=0&&i>u8.length-66000;i--){
+    if(dv.getUint32(i,true)===0x06054b50){ son=i; break; }
+  }
+  if(son<0) return Promise.reject({hata:"zip"});
+  var adet=dv.getUint16(son+10,true), p=dv.getUint32(son+16,true), girisler={};
+  for(var n=0;n<adet&&p+46<=u8.length;n++){
+    if(dv.getUint32(p,true)!==0x02014b50) break;
+    var yontem=dv.getUint16(p+10,true), boyut=dv.getUint32(p+20,true);
+    var adUz=dv.getUint16(p+28,true), ekUz=dv.getUint16(p+30,true), yorumUz=dv.getUint16(p+32,true);
+    var yerel=dv.getUint32(p+42,true);
+    var ad=new TextDecoder("utf-8").decode(u8.subarray(p+46,p+46+adUz));
+    girisler[ad]={yontem:yontem,boyut:boyut,yerel:yerel};
+    p+=46+adUz+ekUz+yorumUz;
+  }
+  return Promise.resolve({u8:u8,dv:dv,girisler:girisler});
+}
+function zipMetin(z,ad){
+  var g=z.girisler[ad];
+  if(!g) return Promise.reject({hata:"icerik"});
+  var p=g.yerel;
+  if(z.dv.getUint32(p,true)!==0x04034b50) return Promise.reject({hata:"zip"});
+  var adUz=z.dv.getUint16(p+26,true), ekUz=z.dv.getUint16(p+28,true);
+  var bas=p+30+adUz+ekUz;
+  var ham=z.u8.subarray(bas,bas+g.boyut);
+  var coz=(g.yontem===0)?Promise.resolve(ham):sisir(ham);
+  return coz.then(function(v){ return new TextDecoder("utf-8").decode(v); });
+}
+
+// ---- xml yardımcıları
+function xmlCoz(s){
+  return String(s==null?"":s)
+    .replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"')
+    .replace(/&apos;/g,"'").replace(/&#x([0-9a-fA-F]+);/g,function(_,h){ return String.fromCharCode(parseInt(h,16)); })
+    .replace(/&#(\d+);/g,function(_,d){ return String.fromCharCode(Number(d)); })
+    .replace(/&amp;/g,"&");
+}
+function etiketMetni(x,etiket){
+  var re=new RegExp("<"+etiket+"(?:\\s[^>]*)?>([\\s\\S]*?)<\\/"+etiket+">","g"), m, p=[];
+  while((m=re.exec(x))!==null) p.push(xmlCoz(m[1].replace(/<[^>]*>/g,"")));
+  return p.join("");
+}
+function sutunNo(harfler){
+  var n=0;
+  for(var i=0;i<harfler.length;i++) n=n*26+(harfler.charCodeAt(i)-64);
+  return n-1;
+}
+
+// ---- xlsx
+function xlsxSatirlar(z){
+  var sayfa="";
+  Object.keys(z.girisler).forEach(function(ad){
+    var m=ad.match(/^xl\/worksheets\/sheet(\d+)\.xml$/);
+    if(!m) return;
+    if(!sayfa||Number(m[1])<Number(sayfa.match(/sheet(\d+)/)[1])) sayfa=ad;
+  });
+  if(!sayfa) return Promise.reject({hata:"icerik"});
+  var sabit=[];
+  return zipMetin(z,"xl/sharedStrings.xml").catch(function(){ return ""; }).then(function(ss){
+    var re=/<si(?:\s[^>]*)?>([\s\S]*?)<\/si>/g, m;
+    while((m=re.exec(ss))!==null) sabit.push(etiketMetni(m[1],"t"));
+    return zipMetin(z,sayfa);
+  }).then(function(x){
+    var satirlar=[], rre=/<row(?:\s[^>]*)?>([\s\S]*?)<\/row>/g, rm;
+    while((rm=rre.exec(x))!==null){
+      var hucreler=[], cre=/<c\s([^>]*?)\/>|<c\s([^>]*?)>([\s\S]*?)<\/c>/g, cm, enSon=-1;
+      while((cm=cre.exec(rm[1]))!==null){
+        var nitelik=cm[1]||cm[2]||"", icerik=cm[3]||"";
+        var harf=(nitelik.match(/r="([A-Z]+)\d+"/)||[])[1];
+        var tip=(nitelik.match(/t="([^"]+)"/)||[])[1]||"n";
+        var deger="";
+        if(tip==="s"){ deger=sabit[Number(etiketMetni(icerik,"v"))]||""; }
+        else if(tip==="inlineStr"){ deger=etiketMetni(icerik,"t"); }
+        else { deger=etiketMetni(icerik,"v"); }
+        var yer=harf?sutunNo(harf):enSon+1;
+        while(hucreler.length<yer) hucreler.push("");
+        hucreler[yer]=deger; enSon=yer;
+      }
+      satirlar.push(hucreler);
+    }
+    return satirlar;
+  });
+}
+
+// ---- docx: önce tablolar, sonra tablo dışı paragraflar
+function docxSatirlar(z){
+  return zipMetin(z,"word/document.xml").then(function(x){
+    var satirlar=[];
+    (x.match(/<w:tr[\s>][\s\S]*?<\/w:tr>/g)||[]).forEach(function(tr){
+      var h=(tr.match(/<w:tc[\s>][\s\S]*?<\/w:tc>/g)||[]).map(function(tc){ return etiketMetni(tc,"w:t").trim(); });
+      if(h.join("").trim()) satirlar.push(h);
+    });
+    var disi=x.replace(/<w:tbl[\s>][\s\S]*?<\/w:tbl>/g,"");
+    (disi.match(/<w:p[\s>][\s\S]*?<\/w:p>/g)||[]).forEach(function(p){
+      var t=etiketMetni(p,"w:t").trim();
+      if(t) satirlar.push([t]);
+    });
+    return satirlar;
+  });
+}
+
+// ---- csv / düz metin
+function csvAyrac(metin){
+  var ornek=metin.split(/\r?\n/).slice(0,6).join("\n"), en=",", enCok=0;
+  [";",",","\t","|"].forEach(function(a){
+    var s=ornek.split(a).length-1;
+    if(s>enCok){ enCok=s; en=a; }
+  });
+  return enCok?en:null;
+}
+function csvSatirlar(metin){
+  metin=metin.replace(/^﻿/,"");
+  var ayrac=csvAyrac(metin);
+  if(!ayrac) return metin.split(/\r?\n/).filter(function(s){ return s.trim(); }).map(function(s){ return [s.trim()]; });
+  var satirlar=[], alan="", satir=[], tirnak=false;
+  for(var i=0;i<metin.length;i++){
+    var c=metin[i];
+    if(tirnak){
+      if(c==='"'){ if(metin[i+1]==='"'){ alan+='"'; i++; } else tirnak=false; }
+      else alan+=c;
+    } else if(c==='"') tirnak=true;
+    else if(c===ayrac){ satir.push(alan.trim()); alan=""; }
+    else if(c==="\n"){ satir.push(alan.trim()); satirlar.push(satir); satir=[]; alan=""; }
+    else if(c!=="\r") alan+=c;
+  }
+  satir.push(alan.trim());
+  if(satir.join("").trim()) satirlar.push(satir);
+  return satirlar.filter(function(s){ return s.join("").trim(); });
+}
+
+// ---- KASA yedeği
+function jsonSatirlar(metin){
+  var o=JSON.parse(metin);
+  var g=[];
+  (o.kayitlar||[]).forEach(function(k){
+    g.push({ tip:k.tur==="gelir"?"gelir":"gider", tutar:Number(k.tutar)||0, taksit:Number(k.taksit)||1,
+      kategori:k.kategori||"", kisi:"", tarih:gecerliTarih(k.tarih)?k.tarih:iso(new Date()),
+      isyeri:k.isyeri||"", aciklama:k.aciklama||k.kategori||"Kayıt" });
+  });
+  (o.borclar||[]).forEach(function(b){
+    g.push({ tip:b.yon==="alacak"?"alacak":"borc", tutar:Number(b.tutar)||0, taksit:1,
+      kategori:"", kisi:b.kisi||"", tarih:gecerliTarih(b.vade)?b.vade:iso(new Date()),
+      isyeri:"", aciklama:b.aciklama||b.kisi||"Kayıt" });
+  });
+  return {hazir:g.filter(function(k){ return k.tutar>0; })};
+}
+
+// ---- sütun eşleme
+var SUTUN=[
+  ["tarih",   /^(tarih|date|gun|islem tarihi|vade)/],
+  ["taksit",  /taksit|installment/],
+  ["tur",     /^(tur|tip|type|yon|islem turu|hareket)/],
+  ["kategori",/kategori|category|grup|sinif/],
+  ["kisi",    /kisi|kime|kimden|ad soyad|musteri|firma|cari/],
+  ["tutar",   /tutar|fiyat|amount|ucret|bedel|toplam|price|odenen|borc|alacak|harcama|gider|gelir/],
+  ["aciklama",/aciklama|urun|kalem|islem|detay|descr|baslik|konu|not|^ad$|^adi$|magaza|isyeri/]
+];
+function basliklariEsle(satir){
+  var esleme={}, bulunan=0;
+  satir.forEach(function(h,i){
+    var d=sadelestir(String(h||"")).trim();
+    if(!d) return;
+    for(var j=0;j<SUTUN.length;j++){
+      var ad=SUTUN[j][0];
+      if(esleme[ad]!==undefined) continue;
+      if(SUTUN[j][1].test(d)){ esleme[ad]=i; bulunan++; return; }
+    }
+  });
+  return {esleme:esleme, bulunan:bulunan};
+}
+function sayiMi(h){ var t=parseTutar(h); return !isNaN(t); }
+function tarihCoz(h){
+  var s=String(h==null?"":h).trim();
+  if(!s) return "";
+  function iki(n){ return String(n).padStart(2,"0"); }
+  var m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(m) return m[1]+"-"+iki(m[2])+"-"+iki(m[3]);
+  m=s.match(/^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{2,4})/);
+  if(m){
+    var g=Number(m[1]), a=Number(m[2]), y=Number(m[3]);
+    if(y<100) y+=2000;
+    if(g>=1&&g<=31&&a>=1&&a<=12) return y+"-"+iki(a)+"-"+iki(g);
+  }
+  var n=Number(String(s).replace(",","."));
+  if(isFinite(n)&&n>20000&&n<80000){
+    var d=new Date(Date.UTC(1899,11,30)+Math.round(n)*86400000);
+    return d.getUTCFullYear()+"-"+iki(d.getUTCMonth()+1)+"-"+iki(d.getUTCDate());
+  }
+  return "";
+}
+function turCoz(h){
+  var d=sadelestir(String(h||""));
+  if(!d) return "";
+  if(/alacak|tahsil/.test(d)) return "alacak";
+  if(/borc/.test(d)&&!/borc odeme/.test(d)) return "borc";
+  if(/gelir|tahsilat|kazanc|maas/.test(d)) return "gelir";
+  if(/gider|harcama|odeme|cikis/.test(d)) return "gider";
+  return "";
+}
+
+// Tablo satırlarını kayıt taslaklarına çevirir.
+function satirlariCevir(satirlar){
+  satirlar=(satirlar||[]).filter(function(s){ return s&&s.join("").trim(); });
+  if(!satirlar.length) return {girdiler:[],not:""};
+
+  // tek sütunlu tablo (Word paragrafları, düz metin) -> cümle çözümleyici
+  var cokSutun=satirlar.some(function(s){ return s.length>1; });
+  if(!cokSutun){
+    var g=[];
+    satirlar.forEach(function(s){ cozumle(String(s[0])).forEach(function(k){ g.push(k); }); });
+    return {girdiler:g, not:"Satırlar cümle olarak okundu."};
+  }
+
+  var ilk=basliklariEsle(satirlar[0]);
+  var basliklaVar=(ilk.bulunan>=2&&satirlar[0].filter(sayiMi).length===0);
+  var esleme=basliklaVar?ilk.esleme:{};
+  var govde=basliklaVar?satirlar.slice(1):satirlar;
+
+  if(esleme.tutar===undefined){
+    // başlık yok ya da tanınmadı: içerikten tahmin et
+    var sayac=[], tarihSayac=[], uzunluk=[];
+    govde.slice(0,60).forEach(function(s){
+      s.forEach(function(h,i){
+        sayac[i]=(sayac[i]||0)+(sayiMi(h)?1:0);
+        tarihSayac[i]=(tarihSayac[i]||0)+(tarihCoz(h)?1:0);
+        uzunluk[i]=(uzunluk[i]||0)+String(h||"").replace(/[\d.,\s]/g,"").length;
+      });
+    });
+    var enSayi=-1, enTarih=-1, enMetin=-1;
+    sayac.forEach(function(v,i){ if(tarihSayac[i]>(tarihSayac[enTarih]||0)) enTarih=i; });
+    sayac.forEach(function(v,i){ if(i!==enTarih&&v>(sayac[enSayi]||0)) enSayi=i; });
+    uzunluk.forEach(function(v,i){ if(i!==enSayi&&v>(uzunluk[enMetin]||0)) enMetin=i; });
+    if(enSayi>=0) esleme.tutar=enSayi;
+    if(enTarih>=0&&(tarihSayac[enTarih]||0)>govde.length/2) esleme.tarih=enTarih;
+    if(enMetin>=0) esleme.aciklama=enMetin;
+  }
+  if(esleme.tutar===undefined) return {girdiler:[],not:"tutar-yok"};
+
+  var bugun=iso(new Date()), girdiler=[];
+  govde.forEach(function(s){
+    var dolu=s.filter(function(h){ return String(h||"").trim(); });
+    // tek hücrelik satır (Word paragrafı, serbest not) cümle olarak okunur
+    if(dolu.length===1&&!sayiMi(s[esleme.tutar])){
+      var metin=String(dolu[0]).trim();
+      if(!/^(toplam|genel toplam|ara toplam|total|sayfa)/i.test(metin))
+        cozumle(metin).forEach(function(k){ girdiler.push(k); });
+      return;
+    }
+    var ham=s[esleme.tutar];
+    var t=parseTutar(ham);
+    if(isNaN(t)||t===0) return;
+    if(/^(toplam|genel toplam|ara toplam|total)/i.test(String(s[esleme.aciklama]||"").trim())) return;
+    var eksi=t<0||/^\s*-/.test(String(ham));
+    t=Math.abs(t);
+    var aciklama=(esleme.aciklama!==undefined?String(s[esleme.aciklama]||""):"").trim();
+    if(!aciklama){
+      aciklama=s.filter(function(h,i){
+        return i!==esleme.tutar&&i!==esleme.tarih&&String(h||"").replace(/[\d.,\s\/-]/g,"").length>1;
+      }).join(" ").trim();
+    }
+    aciklama=aciklama.slice(0,70);
+    var tip=turCoz(esleme.tur!==undefined?s[esleme.tur]:"");
+    if(!tip) tip=turTespit(sadelestir(aciklama));
+    if(!tip||tip==="gider"){ if(!eksi&&turCoz(aciklama)==="gelir") tip="gelir"; }
+    var defter=(tip==="gider"||tip==="gelir");
+    var kat="";
+    if(defter){
+      var kh=esleme.kategori!==undefined?String(s[esleme.kategori]||"").trim():"";
+      kat=KAT[tip].indexOf(kh)>-1?kh:kategoriBul(sadelestir(aciklama+" "+kh),tip);
+    }
+    var tar=esleme.tarih!==undefined?tarihCoz(s[esleme.tarih]):"";
+    var tk=esleme.taksit!==undefined?Math.min(60,Math.max(1,Math.round(Number(parseTutar(s[esleme.taksit]))||1))):1;
+    var kisi=esleme.kisi!==undefined?String(s[esleme.kisi]||"").trim().slice(0,30):"";
+    if(!defter&&!kisi) kisi=kisiBul(aciklama);
+    girdiler.push({
+      tip:tip, tutar:Math.round(t*100)/100, taksit:tip==="gider"?tk:1,
+      kategori:kat, kisi:kisi, tarih:tar||bugun, isyeri:"",
+      aciklama:aciklama||(kat||"Kayıt")
+    });
+  });
+  return {girdiler:girdiler, not:basliklaVar?"":"Başlık satırı bulunamadı, sütunlar içerikten tahmin edildi."};
+}
+
+// ---- toplu ekleme: tek seferde yazar, 1000 satırda da hızlı
+function topluEkle(liste){
+  var simdi=new Date().toISOString(), sayac=0, ilk=null;
+  liste.forEach(function(g){
+    if(g.tip==="alacak"||g.tip==="borc"){
+      veri.borclar.push({ id:yeniId(), yon:g.tip, kisi:g.kisi||g.aciklama, tutar:g.tutar,
+        vade:g.tarih||"", aciklama:g.aciklama, durum:"acik", kapanis:"", olusturma:simdi });
+    } else {
+      var t=g.tarih||iso(new Date());
+      if(!ilk) ilk=t;
+      veri.kayitlar.push({ id:yeniId(), tur:g.tip, tutar:g.tutar,
+        taksit:g.tip==="gider"?(g.taksit||1):1, kategori:g.kategori||"Diğer",
+        tarih:t, aciklama:g.aciklama, isyeri:g.isyeri||"", olusturma:simdi });
+    }
+    sayac++;
+  });
+  kaydet();
+  return {sayac:sayac, ilk:ilk};
+}
+
+function trTarih(t){
+  return gecerliTarih(t)?t.split("-").reverse().join("."):String(t||"");
+}
+
+function aktarHata(e){
+  if(!e) return "Dosya okunamadı.";
+  if(e.hata==="eski-tarayici") return "Bu tarayıcı Excel/Word açamıyor. Dosyayı CSV olarak kaydedip tekrar dene.";
+  if(e.hata==="zip"||e.hata==="icerik") return "Dosyanın içini çözemedim. Excel'de \"Farklı kaydet → CSV\" deneyebilirsin.";
+  if(e.hata==="eski-excel") return "Bu eski bir .xls dosyası. Excel'de .xlsx ya da CSV olarak kaydet.";
+  if(e.hata==="tutar-yok") return "Dosyada tutar sütununu bulamadım. Bir sütunun başlığı \"Tutar\" olsun.";
+  if(e.hata==="bos") return "Dosyada kayda çevrilecek satır yok.";
+  return "Dosya okunamadı. CSV ya da Excel (.xlsx) dene.";
+}
+
+function belgeAktar(dosya){
+  var ad=String(dosya.name||"").toLowerCase();
+  durum("Dosya okunuyor…",false);
+  var p;
+  if(/\.xls$/.test(ad)) p=Promise.reject({hata:"eski-excel"});
+  else if(/\.(xlsx|xlsm)$/.test(ad)) p=dosyaTamponu(dosya).then(zipOku).then(xlsxSatirlar).then(satirlariCevir);
+  else if(/\.docx$/.test(ad)) p=dosyaTamponu(dosya).then(zipOku).then(docxSatirlar).then(satirlariCevir);
+  else if(/\.json$/.test(ad)) p=dosyaMetni(dosya).then(function(m){
+    var o=jsonSatirlar(m);
+    return {girdiler:o.hazir, not:"KASA yedeğinden okundu."};
+  });
+  else p=dosyaMetni(dosya).then(csvSatirlar).then(satirlariCevir);
+
+  p.then(function(o){
+    if(o.not==="tutar-yok") throw {hata:"tutar-yok"};
+    var g=(o.girdiler||[]).filter(function(k){ return k.tutar>0; });
+    if(!g.length) throw {hata:"bos"};
+    durum("",false);
+    aktarOnay(g,dosya.name||"Dosya",o.not||"");
+  }).catch(function(e){
+    durum(aktarHata(e),true);
+  });
+}
+
+// ---- içe aktarma onayı
+function aktarOnay(girdiler,kaynak,not){
+  var sayilar={gider:0,gelir:0,alacak:0,borc:0}, toplam={gider:0,gelir:0,alacak:0,borc:0};
+  var enEski=null, enYeni=null;
+  girdiler.forEach(function(g){
+    sayilar[g.tip]++; toplam[g.tip]+=g.tutar;
+    if(!enEski||g.tarih<enEski) enEski=g.tarih;
+    if(!enYeni||g.tarih>enYeni) enYeni=g.tarih;
+  });
+
+  katmanAc("İçe aktar",function(govde){
+    govde.innerHTML="";
+    var card=el("div","card");
+    card.appendChild(el("p","ozetUst",
+      kaynak+" · "+girdiler.length+" satır"+(enEski?(" · "+trTarih(enEski)+" → "+trTarih(enYeni)):"")));
+    if(not) card.appendChild(el("p","bilgi",not));
+
+    var kutu=el("div","hesapListe");
+    [["gider","Gider"],["gelir","Gelir"],["alacak","Alacak"],["borc","Borç"]].forEach(function(p){
+      if(!sayilar[p[0]]) return;
+      var s=el("div","hesapSatir");
+      s.appendChild(el("div","ad",p[1]+" · "+sayilar[p[0]]+" kayıt"));
+      s.appendChild(el("div","tut "+(p[0]==="gelir"||p[0]==="alacak"?"pos":"neg"),para(toplam[p[0]])));
+      kutu.appendChild(s);
+    });
+    card.appendChild(kutu);
+
+    card.appendChild(el("p","bilgi","İlk satırlar:"));
+    var on=el("div","hesapListe");
+    girdiler.slice(0,12).forEach(function(g){
+      var s=el("div","hesapSatir");
+      s.appendChild(el("div","ad",trTarih(g.tarih)+" · "+(g.aciklama||g.kisi)));
+      s.appendChild(el("div","tut "+(g.tip==="gelir"||g.tip==="alacak"?"pos":"neg"),para(g.tutar)));
+      on.appendChild(s);
+    });
+    card.appendChild(on);
+    if(girdiler.length>12) card.appendChild(el("p","bilgi","… ve "+(girdiler.length-12)+" satır daha."));
+
+    var islem=el("div","islem");
+    var ekle=el("button","ana","Hepsini ekle ("+girdiler.length+")"); ekle.type="button";
+    ekle.addEventListener("click",function(){
+      var s=topluEkle(girdiler);
+      if(s.ilk){ var p=s.ilk.split("-"); yil=Number(p[0]); ay=Number(p[1])-1; }
+      katmanKapat(); ciz();
+      durum(s.sayac+" kayıt içe aktarıldı.",false);
+    });
+    islem.appendChild(ekle);
+    if(girdiler.length<=40){
+      var tek=el("button","kapatBtn","Tek tek incele"); tek.type="button";
+      tek.addEventListener("click",function(){
+        katmanAc("İçe aktarılacaklar",function(g2){
+          g2.innerHTML="";
+          var c2=el("div","card");
+          c2.appendChild(el("p","ozetUst",kaynak+" · "+girdiler.length+" satır"));
+          incelemeCiz(c2,girdiler,function(sonuc){ katmanKapat(); durum(sonuc,false); ciz(); },false);
+          g2.appendChild(c2);
+        });
+      });
+      islem.appendChild(tek);
+    }
+    var vaz=el("button","kapatBtn","Vazgeç"); vaz.type="button";
+    vaz.addEventListener("click",function(){ katmanKapat(); durum("",false); });
+    islem.appendChild(vaz);
+    card.appendChild(islem);
+    govde.appendChild(card);
   });
 }
 

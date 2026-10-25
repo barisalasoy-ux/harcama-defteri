@@ -60,6 +60,11 @@ Kurduktan sonra ikona dokununca tam ekran, uygulama gibi açılır ve **internet
 - **Yaz / 🎙 Konuş** → "markete 420 lira verdim, Ali'den 1500 alacağım var ayın 30'una"
   → "Kayda çevir" → çıkan kayıtları kontrol edip ekle.
   Mikrofon Android Chrome'da çalışır; iOS Safari'de klavyedeki mikrofonu kullan.
+- **📷** → üç seçenek çıkar:
+  - *Fotoğraf çek* — kasada hemen çek, sonra uğraşma.
+  - *Galeriden seç* — biriken fişleri **birden fazla** seçebilirsin, sırayla okunup tek listede toplanır.
+  - *Dosyadan aktar* — Excel (.xlsx), CSV, Word (.docx), düz metin ya da KASA yedeği (.json).
+    Bu tamamen cihazda çalışır: internet de API anahtarı da gerekmez.
 - **✎** → elle giriş (tutar, kategori, tarih, taksit, nereden).
 - **Hareketler / Alacak & Borç / Aylık rapor / Toplam rapor** → alt menü butonları.
 - **Taksit:** 12 taksit 24.000 ₺ girersen her aya 2.000 ₺ düşer, raporda kalan borç görünür.
@@ -75,6 +80,26 @@ Kurduktan sonra ikona dokununca tam ekran, uygulama gibi açılır ve **internet
 - Kategori: 29 kategori, anahtar kelimeyle (market, bebek bezi, benzin, eczane, kira, aidat…)
 
 Yanlış anlarsa onay ekranından düzeltirsin; hiçbir şey sormadan kaydetmez.
+
+---
+
+### Dosyadan aktarma nasıl çalışır
+
+Banka ekstresi ya da kendi tuttuğun liste binlerce satır olabilir; onu fotoğraflamak anlamsız.
+`📷 → Dosyadan aktar` ile dosyayı seç, uygulama satırları okuyup kayda çevirir.
+
+- **Başlık satırı varsa** sütunlar isimlerinden eşleşir: `Tarih`, `Açıklama`, `Tutar`, `Tür`,
+  `Kategori`, `Kişi`, `Taksit`. Sıraları önemli değil, hepsi olmak zorunda değil — tek şart `Tutar`.
+- **Başlık yoksa** sütunlar içerikten tahmin edilir (tarihe benzeyen sütun tarih, sayı sütunu tutar,
+  en uzun metin sütunu açıklama).
+- **Tür sütunu yoksa** açıklamadan anlaşılır: "Ayşe'ye borç verdim" → alacak, "Güney'den borç aldım"
+  → borç, "Maaş" → gelir, gerisi gider.
+- **Word'de** hem tablolar hem düz paragraflar okunur; paragraflar cümle olarak çözümlenir
+  ("Ahmet'ten 1500 alacağım var").
+- Eklemeden önce özet ekranı çıkar: kaç satır, hangi türden kaç kayıt, tarih aralığı, ilk satırlar.
+  40 satıra kadar "Tek tek incele" ile hepsini düzeltebilirsin.
+
+Excel'e aktar → düzelt → geri aktar şeklinde de kullanılabilir.
 
 ---
 
