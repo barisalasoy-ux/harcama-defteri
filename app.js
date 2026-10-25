@@ -15,11 +15,13 @@ var AYLAR=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos"
 var GUNLER=["Pazar","Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi"];
 var TAKSITLER=[1,2,3,4,5,6,8,9,10,12,18,24];
 var ANAHTAR="harcama-defteri-v1";
-var SURUM_ADI="1.2";
+var SURUM_ADI="1.3";
 
 // kategori anahtar kelimeleri (yerel çözümleyici için)
 var IPUCU_GIDER=[
-  ["Market",["market","markete","bakkal","manav","kasap","migros","a101","bim","şok","carrefour","alışveriş"]],
+  ["Market",["market","markete","bakkal","manav","kasap","migros","a101","bim","şok","carrefour","alışveriş",
+             "ekmek","fırın","simit","poğaça","su","sebze","meyve","et","tavuk","balık","peynir","süt",
+             "yumurta","çay","şeker","un","yoğurt","zeytin","makarna","pirinç","yağ","kahvaltılık"]],
   ["Bebek & Çocuk",["bebek","bez","biberon","ıslak mendil","çocuk","oyuncak","mama"]],
   ["Yemek & Kafe",["yemek","restoran","lokanta","kafe","kahve","döner","pizza","hamburger","çay","yemeğe"]],
   ["Fatura",["fatura","elektrik","doğalgaz","su fatura","internet","telefon fatura","suya","su parası"]],
@@ -821,8 +823,11 @@ function cozumle(metin){
     var temiz=cumle
       .replace(/ay[ıi]n\s+\d{1,2}\s*['’]?\s*[a-zçğıöşü]*/gi,"")
       .replace(/\d{1,2}\s*taksit/gi,"")
-      .replace(/(^|[^0-9A-Za-zÇĞİÖŞÜçğıöşü])\d[\d.,]*\s*(tl|lira|₺)?/gi,"$1")
-      .replace(/\s{2,}/g," ").replace(/^[\s,.;-]+|[\s,.;-]+$/g,"").trim();
+      // tutar + birim + ona yapışan ek: "40 tl'ye", "500 liralık", "1.200₺den"
+      .replace(/(^|[^0-9A-Za-zÇĞİÖŞÜçğıöşü])\d[\d.,]*\s*(tl|lira|₺)?\s*['’]?\s*(ye|ya|yi|yı|lik|lık|luk|lük|den|dan|ten|tan|e|a)?\b/gi,"$1")
+      // başta kalan tek başına ek parçaları at
+      .replace(/^\s*['’]?\s*(ye|ya|yi|yı|lik|lık|luk|lük|den|dan|ten|tan|lira|tl)\b/i,"")
+      .replace(/\s{2,}/g," ").replace(/^[\s,.;:'’-]+|[\s,.;:'’-]+$/g,"").trim();
     sonuc.push({
       tip:tip, tutar:tutar, taksit:tip==="gider"?taksit:1, kategori:kat,
       kisi:(tip==="alacak"||tip==="borc")?kisiBul(cumle):"",
