@@ -15,6 +15,7 @@ var AYLAR=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos"
 var GUNLER=["Pazar","Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi"];
 var TAKSITLER=[1,2,3,4,5,6,8,9,10,12,18,24];
 var ANAHTAR="harcama-defteri-v1";
+var SURUM_ADI="1.1";
 
 // kategori anahtar kelimeleri (yerel çözümleyici için)
 var IPUCU_GIDER=[
@@ -1000,7 +1001,25 @@ function cizAyarlar(govde){
   });
   govde.appendChild(temizle);
 
-  govde.appendChild(el("p","bilgi","Harcama Defteri · offline sürüm · design by alasoy"));
+  var yenile=el("button","kapatBtn genis","Güncellemeleri denetle"); yenile.type="button";
+  yenile.addEventListener("click",function(){
+    yenile.textContent="Denetleniyor…";
+    var isler=[];
+    if("serviceWorker" in navigator&&navigator.serviceWorker.getRegistrations){
+      isler.push(navigator.serviceWorker.getRegistrations().then(function(rs){
+        return Promise.all(rs.map(function(r){ return r.update().catch(function(){}); }));
+      }).catch(function(){}));
+    }
+    if(window.caches&&caches.keys){
+      isler.push(caches.keys().then(function(ks){
+        return Promise.all(ks.map(function(k){ return caches.delete(k); }));
+      }).catch(function(){}));
+    }
+    Promise.all(isler).then(function(){ location.reload(true); });
+  });
+  govde.appendChild(yenile);
+
+  govde.appendChild(el("p","bilgi","Harcama Defteri · sürüm "+SURUM_ADI+" · offline · design by alasoy"));
 }
 
 // ---------------------------------------------------------------- menü

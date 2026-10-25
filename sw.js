@@ -1,5 +1,7 @@
-/* Harcama Defteri — service worker: uygulamayı tamamen offline çalıştırır. */
-var SURUM = "defter-v2";
+/* Harcama Defteri — service worker.
+   Uygulama dosyaları: önce ağ, olmazsa önbellek (güncellemeler anında gelsin).
+   İnternet yoksa her şey önbellekten çalışır. */
+var SURUM = "defter-v3";
 var DOSYALAR = [
   "./",
   "./index.html",
@@ -13,7 +15,8 @@ var DOSYALAR = [
 
 self.addEventListener("install", function(e){
   e.waitUntil(
-    caches.open(SURUM).then(function(c){ return c.addAll(DOSYALAR); })
+    caches.open(SURUM)
+      .then(function(c){ return c.addAll(DOSYALAR); })
       .then(function(){ return self.skipWaiting(); })
   );
 });
@@ -29,18 +32,24 @@ self.addEventListener("activate", function(e){
 });
 
 self.addEventListener("fetch", function(e){
-  if(e.request.method !== "GET") return;
+  var istek = e.request;
+  if(istek.method !== "GET") return;
+
+  var url;
+  try { url = new URL(istek.url); } catch(hata){ return; }
+  if(url.origin !== self.location.origin) return;
+
+  // Uygulamanın kendi dosyaları: önce ağdan dene, başarısız olursa önbellekten ver.
   e.respondWith(
-    caches.match(e.request).then(function(bulunan){
-      if(bulunan) return bulunan;
-      return fetch(e.request).then(function(yanit){
-        if(yanit && yanit.status === 200 && yanit.type === "basic"){
-          var kopya = yanit.clone();
-          caches.open(SURUM).then(function(c){ c.put(e.request, kopya); });
-        }
-        return yanit;
-      }).catch(function(){
-        return caches.match("./index.html");
+    fetch(istek).then(function(yanit){
+      if(yanit && yanit.status === 200){
+        var kopya = yanit.clone();
+        caches.open(SURUM).then(function(c){ c.put(istek, kopya); });
+      }
+      return yanit;
+    }).catch(function(){
+      return caches.match(istek).then(function(bulunan){
+        return bulunan || caches.match("./index.html");
       });
     })
   );
