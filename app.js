@@ -16,7 +16,7 @@ var AYLAR=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos"
 var GUNLER=["Pazar","Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi"];
 var TAKSITLER=[1,2,3,4,5,6,8,9,10,12,18,24];
 var ANAHTAR="harcama-defteri-v1";
-var SURUM_ADI="4.2";
+var SURUM_ADI="4.3";
 
 // kategori anahtar kelimeleri (yerel çözümleyici için)
 var IPUCU_GIDER=[
@@ -336,35 +336,117 @@ function alan(parent,etiket,tip,placeholder){
 }
 
 // ---------------------------------------------------------------- hareketler
+// Ürün/mağaza/kategori araması — "bu ay kahveye ne verdim" sorusunun cevabı
+var aramaMetin="", aramaKapsam="ay";
+
+function aramaEslesir(r,kelime){
+  return sadelestir((r.aciklama||"")+" "+(r.isyeri||"")+" "+(r.kategori||"")).indexOf(kelime)>-1;
+}
+
 function cizHareketler(govde){
   govde.innerHTML="";
-  var satirlar=aySatirlari(yil,ay);
-  var bolum=el("section");
-  bolum.appendChild(el("h3",null,AYLAR[ay]+" "+yil+" · "+satirlar.length+" hareket"));
-  var kutu=el("div");
-  if(!satirlar.length){
-    var bos=el("div","bos");
-    bos.appendChild(el("strong",null,"Bu ayda kayıt yok"));
-    bos.appendChild(el("p",null,"Ana ekrandan yazarak, konuşarak ya da ✎ ile ekleyebilirsin."));
-    kutu.appendChild(bos);
-  } else {
-    satirlar.sort(function(x,z){
-      if(x.tarih===z.tarih) return (z.r.olusturma||"")<(x.r.olusturma||"")?-1:1;
-      return x.tarih<z.tarih?1:-1;
-    });
-    var sonGun=null;
-    satirlar.forEach(function(s){
-      if(s.tarih!==sonGun){ sonGun=s.tarih; kutu.appendChild(el("div","gun",gunBasligi(s.tarih))); }
-      kutu.appendChild(hareketSatiri(s));
-    });
+
+  // --- arama kutusu ---
+  var araKutu=el("div","card");
+  var alan1=el("div","field");
+  var lbl=el("label",null,"Ara: ürün, mağaza ya da kategori");
+  lbl.setAttribute("for","aramaGirdi");
+  var giris=el("input"); giris.id="aramaGirdi"; giris.type="search";
+  giris.placeholder="örn. kahve, bebek bezi, A101";
+  giris.autocomplete="off"; giris.value=aramaMetin;
+  alan1.appendChild(lbl); alan1.appendChild(giris);
+  araKutu.appendChild(alan1);
+
+  var seg=el("div","seg"); seg.style.marginBottom="0";
+  var sAy=el("button",null,AYLAR[ay]+" "+yil), sTum=el("button",null,"Tüm zamanlar");
+  sAy.type="button"; sTum.type="button";
+  function segCiz(){
+    sAy.setAttribute("aria-pressed",aramaKapsam==="ay"?"true":"false");
+    sTum.setAttribute("aria-pressed",aramaKapsam==="tum"?"true":"false");
   }
-  bolum.appendChild(kutu);
-  govde.appendChild(bolum);
-  if(satirlar.length){
-    var d=el("button","ana genis","Bu ayı CSV olarak indir"); d.type="button";
-    d.addEventListener("click",csvIndir);
-    govde.appendChild(d);
+  seg.appendChild(sAy); seg.appendChild(sTum);
+  araKutu.appendChild(seg);
+  govde.appendChild(araKutu);
+
+  var sonucKutu=el("div");
+  govde.appendChild(sonucKutu);
+
+  function listeCiz(){
+    sonucKutu.innerHTML="";
+    var kelime=sadelestir(aramaMetin.trim());
+    var hepsi=kelime&&aramaKapsam==="tum"?tumYayilim():aySatirlari(yil,ay);
+    var satirlar=kelime?hepsi.filter(function(x){ return aramaEslesir(x.r,kelime); }):hepsi;
+
+    if(kelime){
+      var gelir=0, gider=0, aylik={};
+      satirlar.forEach(function(x){
+        if(x.r.tur==="gelir") gelir+=x.pay; else gider+=x.pay;
+        aylik[x.anahtar]=(aylik[x.anahtar]||0)+(x.r.tur==="gelir"?0:x.pay);
+      });
+      var ozet=el("div","card");
+      ozet.appendChild(el("p","ozetUst",
+        "\u201c"+aramaMetin.trim()+"\u201d · "+(aramaKapsam==="ay"?(AYLAR[ay]+" "+yil):"tüm zamanlar")));
+      if(!satirlar.length){
+        ozet.appendChild(el("p","durum","Eşleşen kayıt yok. Başka bir kelime dene ya da kapsamı genişlet."));
+      } else {
+        kutuSatiri(ozet,"Kayıt sayısı",String(satirlar.length));
+        if(gider) kutuSatiri(ozet,"Toplam gider",para(gider),"neg");
+        if(gelir) kutuSatiri(ozet,"Toplam gelir",para(gelir),"pos");
+        if(satirlar.length>1&&gider) kutuSatiri(ozet,"Kayıt başına ortalama",para(gider/
+          satirlar.filter(function(x){ return x.r.tur!=="gelir"; }).length));
+      }
+      sonucKutu.appendChild(ozet);
+
+      var aylar=Object.keys(aylik).filter(function(k){ return aylik[k]>0; }).sort();
+      if(aramaKapsam==="tum"&&aylar.length>1){
+        var b=el("section");
+        b.appendChild(el("h3",null,"Aylara göre"));
+        var c=el("div","card");
+        c.appendChild(barListesi(aylar.slice().sort(function(a,b2){ return aylik[b2]-aylik[a]; })
+          .map(function(k){
+            var p=k.split("-");
+            return { ad:AYLAR[Number(p[1])-1]+" "+p[0], tutar:aylik[k] };
+          }), gider, null, ""));
+        b.appendChild(c);
+        sonucKutu.appendChild(b);
+      }
+    }
+
+    var bolum=el("section");
+    bolum.appendChild(el("h3",null, kelime
+      ? "Eşleşen kayıtlar"
+      : AYLAR[ay]+" "+yil+" · "+satirlar.length+" hareket"));
+    var kutu=el("div");
+    if(!satirlar.length&&!kelime){
+      var bos=el("div","bos");
+      bos.appendChild(el("strong",null,"Bu ayda kayıt yok"));
+      bos.appendChild(el("p",null,"Ana ekrandan yazarak, konuşarak ya da ✎ ile ekleyebilirsin."));
+      kutu.appendChild(bos);
+    } else {
+      satirlar=satirlar.slice().sort(function(x,z){
+        if(x.tarih===z.tarih) return (z.r.olusturma||"")<(x.r.olusturma||"")?-1:1;
+        return x.tarih<z.tarih?1:-1;
+      });
+      var sonGun=null;
+      satirlar.forEach(function(s){
+        if(s.tarih!==sonGun){ sonGun=s.tarih; kutu.appendChild(el("div","gun",gunBasligi(s.tarih))); }
+        kutu.appendChild(hareketSatiri(s));
+      });
+    }
+    bolum.appendChild(kutu);
+    sonucKutu.appendChild(bolum);
+
+    if(!kelime&&satirlar.length){
+      var d=el("button","ana genis","Bu ayı CSV olarak indir"); d.type="button";
+      d.addEventListener("click",csvIndir);
+      sonucKutu.appendChild(d);
+    }
   }
+
+  giris.addEventListener("input",function(){ aramaMetin=this.value; listeCiz(); });
+  sAy.addEventListener("click",function(){ aramaKapsam="ay"; segCiz(); listeCiz(); });
+  sTum.addEventListener("click",function(){ aramaKapsam="tum"; segCiz(); listeCiz(); });
+  segCiz(); listeCiz();
 }
 function hareketSatiri(s){
   var r=s.r;
