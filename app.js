@@ -16,7 +16,7 @@ var AYLAR=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos"
 var GUNLER=["Pazar","Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi"];
 var TAKSITLER=[1,2,3,4,5,6,8,9,10,12,18,24];
 var ANAHTAR="harcama-defteri-v1";
-var SURUM_ADI="4.9";
+var SURUM_ADI="4.9.1";
 
 // kategori anahtar kelimeleri (yerel çözümleyici için)
 var IPUCU_GIDER=[
@@ -1589,7 +1589,8 @@ function cozumle(metin){
     var kat=tip==="gelir"||tip==="gider"?kategoriBul(dKat,tip==="gelir"?"gelir":"gider"):"";
     var temiz=cumle
       .replace(/ay[ıi]n\s+\d{1,2}\s*['’]?\s*[a-zçğıöşü]*/gi,"")
-      .replace(/\d{1,2}\s*taksit/gi,"")
+      // "12 taksitle" -> ek de gitsin, açıklamada "le" kalmasın
+      .replace(/\d{1,2}\s*taksit[a-zçğıöşü]*/gi,"")
       // tutar + birim + ona yapışan ek: "40 tl'ye", "500 liralık", "1.200₺den"
       .replace(/(^|[^0-9A-Za-zÇĞİÖŞÜçğıöşü])\d[\d.,]*\s*(tl|lira|₺)?\s*['’]?\s*(ye|ya|yi|yı|lik|lık|luk|lük|den|dan|ten|tan|e|a)?\b/gi,"$1")
       // başta kalan tek başına ek parçaları at
