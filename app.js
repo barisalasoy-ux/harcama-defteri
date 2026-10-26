@@ -14,9 +14,19 @@ var KAT = {
 };
 var AYLAR=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
 var GUNLER=["Pazar","Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi"];
-var TAKSITLER=[1,2,3,4,5,6,8,9,10,12,18,24];
+var TAKSITLER=[1,2,3,4,5,6,8,9,10,12,18,24,36,48];
+// Taksit açılır listesi. Listede olmayan bir sayı gelirse (örn. 30 ay) onu da ekler.
+function taksitSecenekleri(sec,ekstra){
+  var liste=TAKSITLER.slice();
+  var n=Math.round(Number(ekstra)||0);
+  if(n>1&&n<=60&&liste.indexOf(n)<0){ liste.push(n); liste.sort(function(a,b){ return a-b; }); }
+  sec.innerHTML="";
+  liste.forEach(function(x){
+    var o=el("option",null,x===1?"Peşin":x+" taksit"); o.value=String(x); sec.appendChild(o);
+  });
+}
 var ANAHTAR="harcama-defteri-v1";
-var SURUM_ADI="4.9.1";
+var SURUM_ADI="5.0";
 
 // kategori anahtar kelimeleri (yerel çözümleyici için)
 var IPUCU_GIDER=[
@@ -818,7 +828,7 @@ function kayitFormu(govde,mevcut){
   taksitKutu=el("div","field");
   taksitKutu.appendChild(el("label",null,"Taksit"));
   var taksit=el("select");
-  TAKSITLER.forEach(function(n){ var o=el("option",null,n===1?"Peşin":n+" taksit"); o.value=String(n); taksit.appendChild(o); });
+  taksitSecenekleri(taksit);
   taksitKutu.appendChild(taksit); card.appendChild(taksitKutu);
   var acik=alan(card,"Açıklama (isteğe bağlı)","text","Örn. haftalık market");
   var isyeri=alan(card,"Nereden (isteğe bağlı)","text","Örn. A101");
@@ -828,6 +838,7 @@ function kayitFormu(govde,mevcut){
     tarih.value=mevcut.tarih;
     acik.value=mevcut.aciklama||"";
     isyeri.value=mevcut.isyeri||"";
+    taksitSecenekleri(taksit,taksitSayisi(mevcut));
     taksit.value=String(taksitSayisi(mevcut));
   } else {
     tarih.value=iso(new Date());
@@ -1405,7 +1416,9 @@ function cizToplamRapor(govde){
 }
 
 // ---------------------------------------------------------------- yerel çözümleyici
-function tarihBul(d){
+// gecmis: cümle olmuş bitmiş bir şeyi anlatıyorsa "ayın 15'i" geçen güne bakar,
+// vade bildiriyorsa (alacak/borç) gelecek aya kayar.
+function tarihBul(d,gecmis){
   var bugunD=new Date();
   if(/\bbugun\b/.test(d)) return iso(bugunD);
   if(/\bdun\b/.test(d)){ var y=new Date(); y.setDate(y.getDate()-1); return iso(y); }
@@ -1416,7 +1429,7 @@ function tarihBul(d){
     var istenen=Number(ayin[1]);
     var y=bugunD.getFullYear(), m=bugunD.getMonth();
     var t=new Date(y,m,Math.min(istenen,new Date(y,m+1,0).getDate()));
-    if(iso(t)<iso(bugunD)){
+    if(!gecmis&&iso(t)<iso(bugunD)){        // vade: gün geçtiyse gelecek ay
       m++; if(m>11){ m=0; y++; }
       t=new Date(y,m,Math.min(istenen,new Date(y,m+1,0).getDate()));
     }
@@ -1506,7 +1519,8 @@ function tutarYerleri(cumle){
     var sonrasi=d.slice(son,son+14);
     var tarihMi=/ayin\s*$/.test(oncesi)||/^\s*[./]\d/.test(sonrasi)||/[./]$/.test(oncesi)
       ||/^\d{1,2}[./]\d{1,2}([./]\d{2,4})?$/.test(m[2]);   // 15.11 ya da 15.11.2026
-    var taksitMi=/^\s*(taksit|tane|adet|numara|no\b|kisi)/.test(sonrasi);
+    // "24 ay taksitli", "12 taksit", "3 tane" gibi sayılar tutar değildir
+    var taksitMi=/^\s*(taksit|tane|adet|numara|no\b|kisi|ay\b|ayl|ayd|aya\b)/.test(sonrasi);
     if(!tarihMi&&!taksitMi&&!isNaN(parseTutar(m[2]))) yerler.push({bas:bas,son:son});
     re.lastIndex=son;
   }
@@ -1558,6 +1572,18 @@ function turTespit(d){
   return "gider";
 }
 
+// "12 taksit", "24 ay taksitli", "36 ay vadeli kredi", "12 ayda" -> taksit sayısı.
+// Dönen rakam, tutar seçiminde o sayının tutar sanılmaması için kullanılır.
+function taksitBul(d){
+  var m=d.match(/(\d{1,3})\s*(?:ay\s*)?taksit\w*/);          // 12 taksit · 24 ay taksitli
+  if(!m) m=d.match(/(\d{1,3})\s*ay\w*\s*(?:vade|kredi|odeme)\w*/);  // 24 ay vadeli kredi
+  if(!m&&/kredi|taksit|vade/.test(d)) m=d.match(/(\d{1,3})\s*ay\w*/); // kredi … 24 ayda
+  if(!m) return null;
+  var n=Number(m[1]);
+  if(!(n>=2&&n<=60)) return null;
+  return {sayi:n, rakam:m[1]};
+}
+
 function cozumle(metin){
   // rakam arasındaki virgülü (1.250,50) bölme
   var kaba=sayiSozcukleri(metin).split(/\n|;|,(?!\s*\d)| ve | ayrıca | bir de /i);
@@ -1572,12 +1598,12 @@ function cozumle(metin){
     // tarih ve taksit sayılarını eleyip gerçek tutarları al
     var yerler=tutarYerleri(cumle);
     var sayilar=yerler.map(function(y){ return d.slice(y.bas,y.son); });
-    var taksitM=d.match(/(\d{1,2})\s*taksit/);
-    var taksit=taksitM?Math.min(60,Number(taksitM[1])):1;
+    var tk=taksitBul(d);
+    var taksit=tk?tk.sayi:1;
     if(!sayilar.length) return;
     var tutar=NaN;
     for(var i=0;i<sayilar.length;i++){
-      if(taksitM&&sayilar[i]===taksitM[1]) continue;
+      if(tk&&sayilar[i]===tk.rakam) continue;
       var k=parseTutar(sayilar[i]);
       if(!isNaN(k)&&(isNaN(tutar)||k>tutar)) tutar=k;
     }
@@ -1585,12 +1611,15 @@ function cozumle(metin){
     // tür tespitini rakamsız metin üzerinde yap: "bana 1000 borçlu" da yakalansın
     var tip=turTespit(d);
     // taksit ifadesi kategori tahminini bozmasın
-    var dKat=d.replace(/\d*\s*taksit\w*/g," ").replace(/\s{2,}/g," ");
+    var dKat=d.replace(/\d*\s*(ay\s*)?taksit\w*/g," ").replace(/\s{2,}/g," ");
     var kat=tip==="gelir"||tip==="gider"?kategoriBul(dKat,tip==="gelir"?"gelir":"gider"):"";
     var temiz=cumle
       .replace(/ay[ıi]n\s+\d{1,2}\s*['’]?\s*[a-zçğıöşü]*/gi,"")
-      // "12 taksitle" -> ek de gitsin, açıklamada "le" kalmasın
-      .replace(/\d{1,2}\s*taksit[a-zçğıöşü]*/gi,"")
+      // "12 taksitle", "24 ay taksitli", "36 ay vadeli" -> eki de dahil temizle
+      .replace(/\d{1,3}\s*ay\s*(vade|taksit)[a-zçğıöşü]*/gi,"")
+      .replace(/\d{1,3}\s*(ay|taksit)[a-zçğıöşü]*/gi,"")
+      // "3 tane", "2 adet" -> açıklamada "tane" tek başına kalmasın
+      .replace(/\d{1,3}\s*(tane|adet)\b/gi,"")
       // tutar + birim + ona yapışan ek: "40 tl'ye", "500 liralık", "1.200₺den"
       .replace(/(^|[^0-9A-Za-zÇĞİÖŞÜçğıöşü])\d[\d.,]*\s*(tl|lira|₺)?\s*['’]?\s*(ye|ya|yi|yı|lik|lık|luk|lük|den|dan|ten|tan|e|a)?\b/gi,"$1")
       // başta kalan tek başına ek parçaları at
@@ -1599,7 +1628,10 @@ function cozumle(metin){
     sonuc.push({
       tip:tip, tutar:tutar, taksit:tip==="gider"?taksit:1, kategori:kat,
       kisi:(tip==="alacak"||tip==="borc")?kisiBul(cumle):"",
-      tarih:tarihBul(d), isyeri:"",
+      // olmuş bitmiş gider/gelir geçmişe, alacak-borç vadesi geleceğe bakar
+      tarih:tarihBul(d,(tip==="gider"||tip==="gelir")&&
+        /odedim|odedik|verdim|verdik|aldim|aldik|harcadim|yatirdim|cektim|yatti|geldi|gitti|oldu/.test(d)),
+      isyeri:"",
       aciklama:(temiz||kat||"Kayıt").slice(0,70)
     });
   });
@@ -2312,7 +2344,7 @@ function incelemeCiz(card,girdiler,bitti,tekSecenek){
     var kat=el("select"); kat.setAttribute("aria-label","Kategori");
     var kisi=el("input"); kisi.placeholder="Kişi"; kisi.value=g.kisi; kisi.setAttribute("aria-label","Kişi");
     var taksit=el("select"); taksit.setAttribute("aria-label","Taksit");
-    TAKSITLER.forEach(function(n){ var o=el("option",null,n===1?"Peşin":n+" taksit"); o.value=String(n); taksit.appendChild(o); });
+    taksitSecenekleri(taksit,g.taksit);
     taksit.value=String(g.taksit||1);
     var tarih=el("input"); tarih.type="date"; tarih.value=g.tarih; tarih.setAttribute("aria-label","Tarih");
     tarih.style.gridColumn="1 / -1";
