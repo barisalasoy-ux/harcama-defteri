@@ -317,3 +317,11 @@ button.secBtn:active{opacity:.7}
 .secimSatir{display:flex;align-items:center;gap:9px;font-size:.86rem;
   padding:4px 0 10px;cursor:pointer}
 .secimSatir input[type="checkbox"]{width:19px;height:19px;flex:none;accent-color:var(--accent)}
+
+/* yeni sürüm bildirimi */
+.guncelCubuk{position:fixed;left:12px;right:12px;bottom:12px;z-index:60;
+  display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+  background:var(--surface);border:1px solid var(--vurguKenar);border-radius:14px;
+  padding:11px 13px;box-shadow:0 10px 32px rgba(0,0,0,.35)}
+.guncelYazi{flex:1;min-width:120px;font-size:.88rem;font-weight:600}
+.guncelCubuk button{padding:9px 15px;font-size:.86rem}

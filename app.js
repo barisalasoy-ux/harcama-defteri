@@ -26,7 +26,7 @@ function taksitSecenekleri(sec,ekstra){
   });
 }
 var ANAHTAR="harcama-defteri-v1";
-var SURUM_ADI="5.0";
+var SURUM_ADI="5.1";
 
 // kategori anahtar kelimeleri (yerel çözümleyici için)
 var IPUCU_GIDER=[
@@ -3374,22 +3374,55 @@ function cizAyarlar(govde){
   var yenile=el("button","kapatBtn genis","Güncellemeleri denetle"); yenile.type="button";
   yenile.addEventListener("click",function(){
     yenile.textContent="Denetleniyor…";
-    var isler=[];
-    if("serviceWorker" in navigator&&navigator.serviceWorker.getRegistrations){
-      isler.push(navigator.serviceWorker.getRegistrations().then(function(rs){
-        return Promise.all(rs.map(function(r){ return r.update().catch(function(){}); }));
-      }).catch(function(){}));
-    }
-    if(window.caches&&caches.keys){
-      isler.push(caches.keys().then(function(ks){
-        return Promise.all(ks.map(function(k){ return caches.delete(k); }));
-      }).catch(function(){}));
-    }
-    Promise.all(isler).then(function(){ location.reload(true); });
+    guncelle();
   });
   govde.appendChild(yenile);
 
   govde.appendChild(el("p","bilgi","KASA · sürüm "+SURUM_ADI+" · tamamen cihazda · design by alasoy"));
+}
+
+// ---------------------------------------------------------------- sürüm güncelleme
+// Önbelleği temizler, service worker'ı yeniler ve sayfayı baştan yükler.
+function guncelle(){
+  var isler=[];
+  if("serviceWorker" in navigator&&navigator.serviceWorker.getRegistrations){
+    isler.push(navigator.serviceWorker.getRegistrations().then(function(rs){
+      return Promise.all(rs.map(function(r){ return r.update().catch(function(){}); }));
+    }).catch(function(){}));
+  }
+  if(window.caches&&caches.keys){
+    isler.push(caches.keys().then(function(ks){
+      return Promise.all(ks.map(function(k){ return caches.delete(k); }));
+    }).catch(function(){}));
+  }
+  Promise.all(isler).then(function(){ location.reload(true); });
+}
+
+// Açılışı hiç bekletmeden, arkadan yeni sürüm var mı diye bakar.
+function surumDenetle(){
+  if(!window.fetch) return;
+  setTimeout(function(){
+    fetch("./surum.txt?z="+Date.now(),{cache:"no-store"}).then(function(y){
+      return y.ok?y.text():null;
+    }).then(function(metin){
+      if(!metin) return;
+      var yeni=String(metin).trim().split(/\s/)[0];
+      if(!yeni||yeni===SURUM_ADI) return;
+      guncellemeCubugu(yeni);
+    }).catch(function(){});
+  },3000);
+}
+
+function guncellemeCubugu(yeni){
+  if($("guncelCubuk")) return;
+  var c=el("div","guncelCubuk"); c.id="guncelCubuk";
+  c.appendChild(el("span","guncelYazi","Yeni sürüm hazır: "+yeni));
+  var b=el("button","ana","Güncelle"); b.type="button";
+  b.addEventListener("click",function(){ b.textContent="Güncelleniyor…"; guncelle(); });
+  var k=el("button","kapatBtn","Sonra"); k.type="button";
+  k.addEventListener("click",function(){ c.parentNode.removeChild(c); });
+  c.appendChild(b); c.appendChild(k);
+  document.body.appendChild(c);
 }
 
 // ---------------------------------------------------------------- menü
@@ -3462,6 +3495,8 @@ try{
 yukle();
 mikrofonKur();
 ciz();
+
+surumDenetle();
 
 // İlk açılışta tanıtım + kurulum rehberi
 try{

@@ -141,8 +141,16 @@ Anahtarı olmayan için uygulama aynen bugünkü gibi çalışmaya devam eder.
 | `app.css` | Tasarım, açık/koyu tema |
 | `app.js` | Bütün mantık: kayıtlar, taksit, raporlar, mikrofon, çözümleyici |
 | `sw.js` | Offline çalışmayı sağlayan service worker |
+| `surum.txt` | Yayındaki sürüm numarası; uygulama buradan güncelleme denetler |
 | `manifest.webmanifest` | Uygulama adı, ikon, tam ekran ayarı |
 | `icon-*.png` | Ana ekran ikonları |
 
-Kodda bir şey değiştirirsen `sw.js` içindeki `SURUM` değerini artır (`defter-v1` → `defter-v2`),
-yoksa telefon eski sürümü önbellekten açmaya devam eder.
+Kodda bir şey değiştirirsen **üç** yeri birlikte güncelle:
+
+1. `app.js` → `SURUM_ADI` (Ayarlar'da görünen sürüm)
+2. `surum.txt` → aynı numara (uygulama güncellemeyi buradan anlar)
+3. `sw.js` → `SURUM` (`kasa-v33` → `kasa-v34`), yoksa eski dosyalar önbellekte kalır
+
+**Açılış davranışı:** service worker önce önbellekten verir, yeni dosyaları arkadan indirir.
+Uygulama internetsiz ya da şebeke zayıfken de anında açılır; yeni sürüm bir sonraki açılışta
+devreye girer. `surum.txt` farklıysa ekranın altında "Yeni sürüm hazır" çubuğu çıkar.
